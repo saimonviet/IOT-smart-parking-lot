@@ -1,0 +1,6 @@
+# Cài bằng apt TRƯỚC (bản có sẵn của Raspberry Pi OS, ổn định hơn pip):
+#   sudo apt install -y python3-picamera2 python3-gpiozero python3-lgpio python3-yaml python3-pil python3-websocket \
+#                       python3-spidev python3-rpi.gpio fonts-dejavu-core
+# Tạo venv với --system-site-packages để dùng được các gói trên, rồi:  pip install -r requirements.txt
+luma.oled>=3.12
+luma.lcd>=2.10        # màn TFT ILI9341 2.8" (SPI)

@@ -1,0 +1,48 @@
+{
+  "arch": "mobilenet_v3_small",
+  "img_size": 128,
+  "mean": [
+    0.485,
+    0.456,
+    0.406
+  ],
+  "std": [
+    0.229,
+    0.224,
+    0.225
+  ],
+  "classes": [
+    "empty",
+    "occupied"
+  ],
+  "threshold": 0.10999999999999999,
+  "temperature": 1.1538461538461537,
+  "hyperparameters": {
+    "lr": 0.0009455278705250597,
+    "weight_decay": 1.7209970375305206e-05,
+    "label_smoothing": 0.0007242770922008986,
+    "dropout": 0.29260389867215203,
+    "warmup": 0.11519402106582718
+  },
+  "batch": 256,
+  "best_epoch": 12,
+  "dataset": "CNRPark+EXT (train split theo ngày)",
+  "finetuned_on_custom": false,
+  "test_metrics": {
+    "accuracy": 0.99808,
+    "precision": 0.9977,
+    "recall": 0.99896,
+    "f1": 0.99833,
+    "roc_auc": 0.9996,
+    "avg_precision": 0.99966
+  },
+  "unseen_camera_metrics": {
+    "accuracy": 0.95693,
+    "precision": 0.96641,
+    "recall": 0.96917,
+    "f1": 0.96779,
+    "roc_auc": 0.99157,
+    "avg_precision": 0.99603
+  },
+  "created": "2026-10-28 03:38"
+}

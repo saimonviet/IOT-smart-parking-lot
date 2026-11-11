@@ -1,0 +1,15 @@
+# PyTorch có CUDA (GPU NVIDIA) — cài trước, riêng:
+#   pip install torch torchvision --index-url https://download.pytorch.org/whl/cu126
+# Không có GPU: pip install torch torchvision
+jupyter
+nbconvert
+ipykernel
+numpy
+pandas
+matplotlib
+seaborn
+scikit-learn
+optuna
+pillow
+opencv-python
+tqdm

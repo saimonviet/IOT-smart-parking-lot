@@ -1,0 +1,68 @@
+# Cấu hình Raspberry Pi 3 — số chân là BCM (GPIO), không phải số chân vật lý.
+# Sơ đồ 10 ô (A1–A3, B1–B3, C1–C4). Rào chắn dùng 2 servo SG90.
+# Cần cấu hình Pi (xem README): BẬT SPI0 chỉ 1 CS (dtoverlay=spi0-1cs) cho TFT, TẮT serial (GPIO 14/15 dùng cho LED A1, A2), TẮT I2C (GPIO 2/3 dùng cho TFT DC, LED C4).
+# Chân 31, 33, 35, 37 trên Pi này không cắm được -> không dùng GPIO 6, 13, 19, 26. Còn trống: GPIO 23 (chân 16), GPIO 0 (chân 27).
+
+# Mục server: chạy `python tools/pi_secret.py` trong pc_server trên máy tính rồi dán đè đoạn nó in ra.
+server:
+  url: wss://192.168.1.10:8443      # wss = có mã hóa TLS; IP máy tính chạy pc_server (python run.py)
+  key: "DÁN-KHÓA-TỪ-pi_secret.py"   # khóa bí mật dùng chung, KHÔNG chia sẻ. Không bao giờ gửi qua mạng
+  fingerprint: ""                   # vân tay SHA-256 chứng chỉ server (ghim chứng chỉ, chống server giả)
+  reconnect_s: 3
+  request_timeout_s: 6              # chờ server đọc biển số + cấp ô; quá hạn thì dùng chế độ offline
+
+offline:
+  policy: open                      # open = vẫn mở rào khi mất server | deny = không mở
+
+gates:
+  in:  {trig: 5, echo: 25, trigger_cm: 15}    # cảm biến siêu âm cổng vào (TRIG chân 29; GPIO 8 nhường cho CS của TFT)
+  out: {trig: 14, echo: 15,  trigger_cm: 15}    # cảm biến siêu âm cổng ra (ECHO = GPIO 1, chân 28)
+  clear_delay_s: 2.0                # xe đi khuất khỏi cảm biến bao lâu thì mới đóng rào
+  new_car_gap_s: 1.0                # trống >= bấy nhiêu giây rồi lại có xe (rào chưa đóng) = xe mới -> xin cấp ô mới; phải < clear_delay_s
+  sample_hz: 10
+
+barrier:                            # 2 servo SG90 (dây tín hiệu màu cam/vàng)
+  in_pin: 12                        # servo rào vào (GPIO 12 = chân vật lý 32)
+  out_pin: 24                       # servo rào ra
+  in_closed_angle: 0                # rào VÀO: 0° đóng, 90° mở
+  in_open_angle: 90
+  out_closed_angle: 90              # rào RA: 90° đóng, 0° mở
+  out_open_angle: 0
+
+leds:
+  # 10 LED theo thứ tự ô: A1, A2, A3, B1, B2, B3, C1, C2, C3, C4
+  # LED sáng = ô trống, tắt = có xe, nhấp nháy = đang giữ chỗ
+  pins: [1, 7, 18, 20, 21, 4, 17, 27, 22, 3]   # C4 = GPIO 3 (chân 5); GPIO 10 nhường cho MOSI của TFT
+  active_high: true                 # LED nối GPIO -> điện trở -> LED -> GND
+
+display: tft                        # tft | oled (oled = màn SSD1306 cũ trên I2C, mục oled bên dưới)
+
+tft:                                # màn TFT SPI, dùng SPI0 phần cứng
+  driver: ili9341                   # ili9341 (2.4"/2.8" 320x240) | st7735 (1.8" 160x128) | st7789 (1.3"/1.54" 240x240)
+  width: 320
+  height: 240
+  rotate: 0                         # 0..3, mỗi bước xoay 90°
+  spi_port: 0                       # SCK = GPIO 11 (chân 23), MOSI/SDA = GPIO 10 (chân 19)
+  spi_device: 0                     # CS = CE0 = GPIO 8 (chân 24)
+  dc: 2                             # DC (còn ghi A0 / RS) = GPIO 2, chân 3 (cần TẮT I2C)
+  rst: 16                           # RST (RESET) = chân 36
+  backlight: null                   # null = chân LED/BL nối 3.3V (luôn sáng) | 12 = điều khiển qua GPIO 12 (chỉ khi module có transistor)
+  speed_mhz: 32                     # hình nhiễu/lệch màu thì giảm còn 16
+  bgr: false                        # đỏ và xanh dương bị tráo nhau thì đặt true (không dùng cho st7789)
+  show_map: true                    # vẽ sơ đồ bãi + đường đi tới ô (sơ đồ lấy từ server) | false = chỉ chữ + mũi tên
+
+oled:
+  driver: ssd1306                   # ssd1306 (màn 0.96") | sh1106 (màn 1.3"); sáng nhưng trống/nhiễu thì đổi
+  address: 0x3C
+  port: 1                           # I2C phần cứng: SDA = GPIO 2 (chân 3), SCL = GPIO 3 (chân 5)
+  width: 128
+  height: 64
+  rotate: 0                         # 0 hoặc 2 (xoay 180°)
+
+camera:
+  width: 640
+  height: 480
+  fps: 15
+  port: 8081
+  hflip: false
+  vflip: false

@@ -1,0 +1,19 @@
+__pycache__/
+*.pyc
+.venv/
+venv/
+node_modules/
+pc_server/web/dist/
+pc_server/data/
+model_training/data/
+model_training/results/
+*.pt
+camera_test.jpg
+raspberry_pi/.lot_cache.json
+model_training/runs/
+model_training/models/
+*.log
+run_IOT.txt
+.env
+# giữ lại mô hình nhận diện chỗ trống đã train (6 MB) để chạy server ngay
+!pc_server/models/occupancy.pt

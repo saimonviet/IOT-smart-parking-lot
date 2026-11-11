@@ -1,0 +1,8 @@
+fastapi>=0.110
+uvicorn[standard]>=0.29
+pyjwt>=2.8
+cryptography>=42          # tạo chứng chỉ TLS tự ký cho cổng wss:// của Pi
+opencv-python-headless>=4.8
+numpy>=1.24
+websocket-client>=1.7     # cho simulator/mock_pi.py
+ultralytics>=8.2          # YOLOv8 (kéo theo torch). Bỏ qua nếu chỉ dùng DETECTOR=background
