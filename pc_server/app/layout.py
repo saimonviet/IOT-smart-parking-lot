@@ -10,6 +10,7 @@ import json
 import math
 import re
 import shutil
+import unicodedata
 
 from . import config
 
@@ -287,3 +288,61 @@ def save(data):
     tmp.write_text(json.dumps(clean, ensure_ascii=False, indent=1), encoding="utf-8")
     tmp.replace(path)
     return clean
+
+
+# ============================================================ mẫu sơ đồ đã lưu (khôi phục nhanh khi chạy demo)
+PRESET_DIR = config.LAYOUT_PATH.parent / "presets"
+PRESET_ID_RE = re.compile(r"^[a-z0-9_-]{1,40}$")
+
+
+def _preset_path(pid):
+    if not PRESET_ID_RE.match(pid or ""):
+        raise ValueError("id mẫu không hợp lệ")
+    return PRESET_DIR / f"{pid}.json"
+
+
+def list_presets():
+    """[{id, name, builtin, created, layout}] — mẫu có sẵn (builtin) trước, rồi mẫu mới nhất."""
+    out = []
+    for f in sorted(PRESET_DIR.glob("*.json")) if PRESET_DIR.exists() else []:
+        try:
+            d = json.loads(f.read_text(encoding="utf-8"))
+            out.append({"id": f.stem, "name": d.get("name") or f.stem, "builtin": bool(d.get("builtin")),
+                        "created": d.get("created", ""), "layout": d["layout"]})
+        except (OSError, ValueError, KeyError):
+            continue
+    out.sort(key=lambda p: (not p["builtin"], "" if p["builtin"] else _neg(p["created"])))
+    return out
+
+
+def _neg(s):
+    return "".join(chr(0x10FFFF - ord(c)) for c in s)  # sắp xếp giảm dần theo thời gian
+
+
+def save_preset(name, data, pid=None, builtin=False):
+    import time
+    name = (name or "").strip()[:60]
+    if not name:
+        raise ValueError("Cần đặt tên cho mẫu")
+    errors, _ = validate(data)
+    if errors:
+        raise ValueError("Sơ đồ chưa hợp lệ: " + "; ".join(errors))
+    if pid is None:
+        ascii_name = unicodedata.normalize("NFKD", name.lower().replace("đ", "d")).encode("ascii", "ignore").decode()
+        slug = re.sub(r"[^a-z0-9]+", "-", ascii_name).strip("-")[:24] or "mau"
+        pid = f"{slug}-{time.strftime('%Y%m%d-%H%M%S')}"
+    path = _preset_path(pid)
+    PRESET_DIR.mkdir(parents=True, exist_ok=True)
+    doc = {"name": name, "builtin": builtin, "created": time.strftime("%Y-%m-%d %H:%M"),
+           "layout": {k: data[k] for k in KEYS if k in data}}
+    path.write_text(json.dumps(doc, ensure_ascii=False, indent=1), encoding="utf-8")
+    return {"id": pid, **doc}
+
+
+def delete_preset(pid):
+    path = _preset_path(pid)
+    if not path.exists():
+        raise FileNotFoundError(pid)
+    if json.loads(path.read_text(encoding="utf-8")).get("builtin"):
+        raise PermissionError("Không xoá được mẫu có sẵn")
+    path.unlink()

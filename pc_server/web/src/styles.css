@@ -238,6 +238,8 @@ code { background: #0d1527; border: 1px solid var(--card-b); border-radius: 6px;
 .btn-danger:hover:not(:disabled) { background: #ef444422; border-color: #ef444466; }
 
 .grid-tpl { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
+.tpl-section { margin: 4px 0 12px; font-size: 15px; }
+.grid-tpl + .tpl-section, .tpl-section + p + .tpl-section { margin-top: 26px; }
 .tpl { display: flex; flex-direction: column; gap: 10px; }
 .tpl p { margin: 0; }
 .tpl-preview { height: 220px; display: grid; place-items: center; background: #0d1527; border-radius: 12px; padding: 10px; }

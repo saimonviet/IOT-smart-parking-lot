@@ -269,6 +269,35 @@ def put_layout(data: dict = Body(...), user=Depends(auth.require_admin)):
     return {"ok": True, "warnings": warnings, "layout": layout.public()}
 
 
+@app.get("/api/layout/presets")
+def get_presets(user=Depends(auth.require_admin)):
+    return layout_mod.list_presets()
+
+
+@app.post("/api/layout/presets")
+def add_preset(body: dict = Body(...), user=Depends(auth.require_admin)):
+    """Lưu một sơ đồ (thường là sơ đồ đang dùng) thành mẫu để khôi phục lại sau."""
+    if not isinstance(body.get("layout"), dict):
+        raise HTTPException(400, "Thiếu sơ đồ")
+    try:
+        p = layout_mod.save_preset(body.get("name"), body["layout"])
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    state.log("info", "layout", f"Quản lý {user['sub']} lưu mẫu sơ đồ \"{p['name']}\"")
+    return p
+
+
+@app.delete("/api/layout/presets/{pid}")
+def remove_preset(pid: str, user=Depends(auth.require_admin)):
+    try:
+        layout_mod.delete_preset(pid)
+    except (ValueError, FileNotFoundError):
+        raise HTTPException(404, "Không có mẫu này")
+    except PermissionError as e:
+        raise HTTPException(403, str(e))
+    return {"ok": True}
+
+
 @app.get("/api/camera/raw.jpg")
 def camera_raw(user=Depends(auth.require_admin)):
     """Khung hình gốc (không vẽ ROI) để vẽ vùng ô; mất camera thì dùng ảnh nền đã chụp."""
