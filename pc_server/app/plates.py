@@ -88,8 +88,9 @@ CAM_PATH = config.DATA_DIR / "plate_cam.json"
 DEFAULT_CAM = {
     "url": config.PLATE_CAM_URL,   # http://<ip-esp32>  | thư mục/ảnh để chạy thử | "" = tắt
     "key": config.PLATE_CAM_KEY,   # khóa truy cập ESP32-CAM (?key=...), khớp CAM_KEY trong firmware
-    # vùng ảnh (tỉ lệ 0–1: x1, y1, x2, y2) của từng làn; một camera nhìn cả hai cổng
-    "roi": {"in": [0.0, 0.0, 0.5, 1.0], "out": [0.5, 0.0, 1.0, 1.0]},
+    # vùng ảnh (tỉ lệ 0–1: x1, y1, x2, y2) của từng làn. Mặc định cả khung hình: Pi xoay camera (servo) về đúng cổng.
+    # Camera cố định nhìn cả hai làn thì chia đôi, vd. in [0, 0, 0.5, 1] và out [0.5, 0, 1, 1].
+    "roi": {"in": [0.0, 0.0, 1.0, 1.0], "out": [0.0, 0.0, 1.0, 1.0]},
 }
 
 

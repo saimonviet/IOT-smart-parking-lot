@@ -14,6 +14,7 @@ Tóm tắt (GPIO / chân vật lý):
 | LED B1, B2, B3 | 20, 21, 4 | 38, 40, 7 |
 | LED C1, C2, C3, C4 | 17, 27, 22, 3 | 11, 13, 15, 5 |
 | Servo vào / ra | 12 / 24 | 32 / 18 |
+| Servo xoay ESP32-CAM (biển số) | 23 | 16 |
 | Siêu âm vào TRIG / ECHO* | 5 / 25 | 29 / 22 |
 | Siêu âm ra TRIG / ECHO* | 7 / 1 | 26 / 28 |
 | TFT 2.8" ILI9341 SCK / SDI(MOSI) / CS (SPI0) | 11 / 10 / 8 | 23 / 19 / 24 |

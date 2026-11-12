@@ -17,3 +17,6 @@ run_IOT.txt
 .env
 # giữ lại mô hình nhận diện chỗ trống đã train (6 MB) để chạy server ngay
 !pc_server/models/occupancy.pt
+!pc_server/models/plate_det.pt
+!pc_server/models/plate_ocr.pt
+esp32_cam/secrets.h

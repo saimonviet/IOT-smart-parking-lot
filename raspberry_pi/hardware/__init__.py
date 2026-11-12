@@ -34,6 +34,16 @@ def make_leds(cfg):
     return LedBank(cfg["leds"]["pins"], cfg["leds"].get("active_high", True))
 
 
+def make_cam_mount(cfg):
+    """Servo xoay ESP32-CAM giữa 2 cổng; None nếu config không có mục cam_mount (camera đứng yên nhìn cả 2 làn)."""
+    m = cfg.get("cam_mount")
+    if not m or m.get("pin") is None:
+        return None
+    from .cam_mount import CamMount
+    return CamMount(m["pin"], {"in": m.get("in_angle", 0), "out": m.get("out_angle", 180)},
+                    m.get("travel_s", 0.6), m.get("settle_s", 0.4), m.get("priority_window_s", 0.3), m.get("hold", False))
+
+
 def make_display(cfg):
     """Màn hình theo `display` trong config: tft (mặc định) hoặc oled. Hai lớp có cùng các hàm idle/guidance/message."""
     if cfg.get("display", "tft") == "tft":

@@ -4,8 +4,9 @@
     python test_hardware.py leds       # chạy một bài test
     python test_hardware.py all        # chạy lần lượt tất cả và in bảng kết quả
 
-Bài test: leds | ledson | ultrasonic | barrier | servo | near | oled | birthday | camera | all
+Bài test: leds | ledson | ultrasonic | barrier | servo | cammount | near | oled | birthday | camera | all
   birthday = màn hình động "Happy Birthday Thúy Hèng": bánh kem, nến, bóng bay, tim, confetti (30s)
+  cammount = servo xoay ESP32-CAM: cổng vào -> cổng ra -> cổng vào (chỉnh cam_mount.in_angle / out_angle)
   servo  = quét góc 0→180→0° rồi mở/đóng từng servo
   ledson = bật sáng tất cả đèn, giữ tới khi bạn nhấn Enter / Ctrl+C
   near   = "đến gần thì mở rào": đưa tay/vật lại gần cảm biến thì rào tương ứng mở, bỏ ra thì đóng
@@ -16,7 +17,7 @@ import sys
 import time
 
 from hardware import (load_config, make_barrier, make_camera, make_display, make_leds,
-                      make_sensor)
+                      make_sensor, make_cam_mount)
 
 OK, FAIL = "\033[92mPASS\033[0m", "\033[91mFAIL\033[0m"
 
@@ -143,6 +144,23 @@ def test_servo(cfg):
         finally:
             b.cleanup()
     return ok_all, "người dùng xác nhận"
+
+
+# ------------------------------------------------------------------ servo xoay ESP32-CAM
+def test_cammount(cfg):
+    m = make_cam_mount(cfg)
+    if m is None:
+        return False, "chưa có mục cam_mount trong config.yaml"
+    try:
+        for gate in ("out", "in", "out", "in"):
+            m.acquire(gate)
+            print(f"   Camera nhìn cổng {'RA' if gate == 'out' else 'VÀO'} ({m.angles[gate]}°)")
+            time.sleep(1.5)
+            m.release(gate)
+        ok = ask("Camera quay đúng về phía biển xe vào / xe ra chứ? (lệch: chỉnh cam_mount.in_angle / out_angle)")
+        return ok, "người dùng xác nhận"
+    finally:
+        m.cleanup()
 
 
 # ------------------------------------------------------------------ đến gần thì mở rào
@@ -276,10 +294,10 @@ def test_camera(cfg, seconds=15):
         cam.stop()
 
 
-TESTS = {"leds": test_leds, "ledson": test_ledson, "ultrasonic": test_ultrasonic, "barrier": test_barrier, "servo": test_servo,
+TESTS = {"leds": test_leds, "ledson": test_ledson, "ultrasonic": test_ultrasonic, "barrier": test_barrier, "servo": test_servo, "cammount": test_cammount,
          "near": test_near, "oled": test_oled, "birthday": test_birthday, "camera": test_camera}
 TITLES = {"leds": "Đèn LED các ô", "ledson": "Bật sáng tất cả đèn (tự dừng)", "ultrasonic": "2 cảm biến siêu âm", "barrier": "2 rào chắn (mở/đóng)",
-          "servo": "Servo SG90 (quét góc + mở/đóng)",
+          "servo": "Servo SG90 (quét góc + mở/đóng)", "cammount": "Servo xoay ESP32-CAM",
           "near": "Đến gần thì mở rào", "oled": "Màn hình TFT/OLED", "birthday": "Màn hình Happy Birthday 🎂",
           "camera": "Camera + độ ổn định"}
 

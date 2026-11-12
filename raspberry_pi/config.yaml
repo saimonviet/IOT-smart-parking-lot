@@ -1,7 +1,7 @@
 # Cấu hình Raspberry Pi 3 — số chân là BCM (GPIO), không phải số chân vật lý.
 # Sơ đồ 10 ô (A1–A3, B1–B3, C1–C4). Rào chắn dùng 2 servo SG90.
 # Cần cấu hình Pi (xem README): BẬT SPI0 chỉ 1 CS (dtoverlay=spi0-1cs) cho TFT, TẮT serial (GPIO 14/15 dùng cho LED A1, A2), TẮT I2C (GPIO 2/3 dùng cho TFT DC, LED C4).
-# Chân 31, 33, 35, 37 trên Pi này không cắm được -> không dùng GPIO 6, 13, 19, 26. Còn trống: GPIO 23 (chân 16), GPIO 0 (chân 27).
+# Chân 31, 33, 35, 37 trên Pi này không cắm được -> không dùng GPIO 6, 13, 19, 26. GPIO 23 (chân 16) = servo xoay ESP32-CAM. Còn trống: GPIO 0 (chân 27).
 
 # Mục server: chạy `python tools/pi_secret.py` trong pc_server trên máy tính rồi dán đè đoạn nó in ra.
 server:
@@ -28,6 +28,15 @@ barrier:                            # 2 servo SG90 (dây tín hiệu màu cam/v�
   in_open_angle: 90
   out_closed_angle: 90              # rào RA: 90° đóng, 0° mở
   out_open_angle: 0
+
+cam_mount:                          # servo SG90 xoay ESP32-CAM (đọc biển số) sang cổng đang có xe; xoá mục này = camera cố định
+  pin: 23                           # dây tín hiệu servo -> GPIO 23 (chân vật lý 16); nguồn 5V chung với servo rào
+  in_angle: 0                       # góc nhìn thấy biển xe VÀO
+  out_angle: 180                    # góc nhìn thấy biển xe RA
+  travel_s: 0.6                     # thời gian servo quay 180°
+  settle_s: 0.4                     # chờ thêm cho camera hết rung rồi mới chụp (ảnh nhoè thì tăng)
+  priority_window_s: 0.3            # xe vào phải chờ bấy nhiêu giây: nếu xe ra tới cùng lúc thì xe ra được quét trước
+  hold: false                       # true = giữ lực servo (camera bị lệch do dây kéo) — servo có thể rung nhẹ
 
 leds:
   # 10 LED theo thứ tự ô: A1, A2, A3, B1, B2, B3, C1, C2, C3, C4

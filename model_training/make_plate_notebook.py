@@ -24,6 +24,7 @@ Chạy thử nhanh (vài phút, kết quả không có ý nghĩa): đặt `$env:
 
 code(r"""
 import json, os, random, shutil, sys, time
+import yaml
 from pathlib import Path
 
 import cv2
@@ -131,8 +132,12 @@ def cpu_ms(weights, n=15):
     for _ in range(n): m.predict(im, imgsz=CFG["det_imgsz"], device="cpu", verbose=False)
     return (time.perf_counter() - t) / n * 1000
 
+SCREEN_CSV = RES / "det_screening.csv"
 screen = []
-for arch in CFG["det_candidates"]:
+if SCREEN_CSV.exists() and not SMOKE and os.getenv("RESCREEN") != "1":
+    print("Dùng lại kết quả sàng lọc đã có:", SCREEN_CSV, "(đặt RESCREEN=1 để chạy lại)")
+    screen = pd.read_csv(SCREEN_CSV).to_dict("records")
+for arch in ([] if screen else CFG["det_candidates"]):
     name = "screen_" + Path(arch).stem
     try:
         m = YOLO(arch)
@@ -146,19 +151,35 @@ for arch in CFG["det_candidates"]:
     except Exception as e:  # kiến trúc không có trong bản ultralytics đang cài
         print("bỏ qua", arch, "->", e)
 screen_df = pd.DataFrame(screen).sort_values("mAP50-95", ascending=False)
-screen_df.to_csv(RES / "det_screening.csv", index=False)
+screen_df.to_csv(SCREEN_CSV, index=False)
 display(screen_df)
 fast = screen_df[screen_df.cpu_ms < 150]
-DET_ARCH = (fast if len(fast) else screen_df).iloc[0]["model"] + ".pt"
+pool = fast if len(fast) else screen_df
+# mAP50-95 chênh < 0.01 sau vài epoch sàng lọc coi như ngang nhau -> lấy mô hình chạy nhanh nhất
+# (train nhanh hơn nhiều, server phản hồi nhanh hơn)
+near = pool[pool["mAP50-95"] >= pool["mAP50-95"].max() - 0.01]
+DET_ARCH = os.getenv("DET_ARCH") or near.sort_values("cpu_ms").iloc[0]["model"] + ".pt"
 print("Chọn:", DET_ARCH)
 """)
 code(r"""
-# huấn luyện đầy đủ mô hình được chọn
-det = YOLO(DET_ARCH)
-det.train(data=str(DET_YAML), epochs=CFG["det_epochs"], imgsz=CFG["det_imgsz"], batch=CFG["det_batch"],
-          patience=CFG["det_patience"], workers=CFG["workers"], device=0 if DEVICE == "cuda" else "cpu",
-          cos_lr=True, close_mosaic=10, degrees=5, perspective=0.0005, fliplr=0.0,   # lật ngang làm ngược chữ -> tắt
-          hsv_v=0.5, scale=0.6, project=str(RES / "det_runs"), name="final", exist_ok=True, seed=CFG["seed"])
+# huấn luyện đầy đủ mô hình được chọn (bị ngắt giữa chừng -> chạy lại notebook sẽ train tiếp từ last.pt)
+FINAL = RES / "det_runs" / "final"
+last = FINAL / "weights" / "last.pt"
+prev = yaml.safe_load((FINAL / "args.yaml").read_text()) if (FINAL / "args.yaml").exists() else {}
+if last.exists() and Path(str(prev.get("model", ""))).stem == Path(DET_ARCH).stem and not SMOKE:
+    print("Train tiếp từ", last)
+    try:
+        YOLO(last).train(resume=True)
+    except AssertionError as e:   # đã train xong từ trước
+        print("Không cần train tiếp:", e)
+else:
+    if FINAL.exists():
+        shutil.rmtree(FINAL)   # lần train dở của kiến trúc khác
+    det = YOLO(DET_ARCH)
+    det.train(data=str(DET_YAML), epochs=CFG["det_epochs"], imgsz=CFG["det_imgsz"], batch=CFG["det_batch"],
+              patience=CFG["det_patience"], workers=CFG["workers"], device=0 if DEVICE == "cuda" else "cpu",
+              cos_lr=True, close_mosaic=10, degrees=5, perspective=0.0005, fliplr=0.0,   # lật ngang làm ngược chữ -> tắt
+              hsv_v=0.5, scale=0.6, project=str(RES / "det_runs"), name="final", exist_ok=True, seed=CFG["seed"])
 DET_BEST = RES / "det_runs" / "final" / "weights" / "best.pt"
 hist = pd.read_csv(RES / "det_runs" / "final" / "results.csv"); hist.columns = hist.columns.str.strip()
 fig, ax = plt.subplots(1, 2, figsize=(12, 3.5))

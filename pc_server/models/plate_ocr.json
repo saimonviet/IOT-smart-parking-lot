@@ -1,0 +1,39 @@
+{
+  "img_h": 48,
+  "img_w": 192,
+  "split_ratio": 2.2,
+  "mean": 0.5,
+  "std": 0.5,
+  "alphabet": "0123456789ABCDEFGHKLMNPRSTUVXYZ",
+  "arch": "CRNN(width=1.0) + CTC",
+  "det_arch": "yolo26n.pt",
+  "det_metrics": {
+    "precision": 0.9802280021260672,
+    "recall": 0.9837428951562478,
+    "mAP50": 0.9941630175914637,
+    "mAP50-95": 0.7872054805266514,
+    "cpu_ms_1024x768": 32.55384000003687
+  },
+  "ocr_metrics": {
+    "test_accuracy": 0.9837912087912087,
+    "test_cer": 0.002929014472777395,
+    "synthetic_accuracy": 1.0,
+    "acc_1row": 0.991578947368421,
+    "acc_2row": 0.975287356321839,
+    "cpu_ms_per_plate": 4.960037999990163
+  },
+  "e2e_metrics": {
+    "end_to_end_accuracy": 0.9795555555555555,
+    "found_plate": 0.9991111111111111,
+    "acc_when_conf>=0.5": 0.9870250231696015,
+    "accepted_conf>=0.5": 0.9591111111111111
+  },
+  "datasets": [
+    "VNLP (fict-labs)",
+    "LP_detection (trungdinh22)",
+    "biển tổng hợp (font NNDam)"
+  ],
+  "custom_images": 0,
+  "created": "2026-11-12 13:52",
+  "smoke": false
+}

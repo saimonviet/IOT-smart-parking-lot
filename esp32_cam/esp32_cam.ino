@@ -10,7 +10,7 @@
  * Nạp code (Arduino IDE):
  *   1. Boards Manager: cài "esp32 by Espressif Systems" (bản 3.x).
  *   2. Tools -> Board: "AI Thinker ESP32-CAM"; Partition Scheme: "Huge APP (3MB No OTA)"; PSRAM: Enabled.
- *   3. Sửa WIFI_SSID / WIFI_PASS / CAM_KEY bên dưới, nạp qua mạch FTDI (nối IO0 với GND khi nạp, rút ra rồi nhấn RESET).
+ *   3. Chép secrets.example.h thành secrets.h, điền WIFI_SSID / WIFI_PASS / CAM_KEY, nạp qua mạch FTDI (nối IO0 với GND khi nạp, rút ra rồi nhấn RESET).
  *   4. Mở Serial Monitor 115200 để xem IP, rồi nhập http://<ip> vào trang Thiết bị của dashboard.
  *
  * Nguồn: dùng 5V/2A ổn định (ESP32-CAM sụt áp khi phát WiFi + bật flash sẽ tự khởi động lại).
@@ -20,9 +20,7 @@
 #include <WiFi.h>
 
 // ------------------------------------------------------------ cấu hình
-const char *WIFI_SSID = "TEN_WIFI";
-const char *WIFI_PASS = "MAT_KHAU_WIFI";
-const char *CAM_KEY   = "doi-khoa-nay-16ky-tu";   // khớp "Khóa" trên trang Thiết bị; "" = không kiểm tra
+#include "secrets.h"   // WIFI_SSID, WIFI_PASS, CAM_KEY — chép secrets.example.h thành secrets.h rồi điền
 // Độ phân giải: biển số trên xe mô hình rất nhỏ -> dùng XGA (1024x768) hoặc SXGA (1280x1024)
 const framesize_t FRAME_SIZE = FRAMESIZE_XGA;
 const int JPEG_QUALITY = 10;                        // 4..63, càng nhỏ càng nét (ảnh càng nặng)

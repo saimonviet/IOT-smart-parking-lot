@@ -5,7 +5,7 @@ import { fmtPlate } from '../utils'
 
 const GATES = [['in', 'Cổng vào', '#38bdf8'], ['out', 'Cổng ra', '#f87171']]
 
-/** Cấu hình ESP32-CAM đọc biển số: địa chỉ, khóa, vùng ảnh của từng làn (một camera nhìn cả 2 cổng). */
+/** Cấu hình ESP32-CAM đọc biển số: địa chỉ, khóa, vùng ảnh của từng làn (camera xoay bằng servo: cả khung hình; camera cố định: mỗi làn một nửa). */
 export default function PlateCamCard({ status, isAdmin }) {
   const [cfg, setCfg] = useState(null)
   const [snap, setSnap] = useState(0)

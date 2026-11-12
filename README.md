@@ -235,7 +235,7 @@ Trên dashboard, thanh trên cùng sẽ báo Raspberry Pi và Camera chuyển sa
 
 ## Nhận diện biển số (ESP32-CAM)
 
-Mỗi xe ra/vào đều phải được đọc biển số. Một ESP32-CAM đặt nhìn được cả hai làn; server chỉ lấy ảnh khi Pi báo có xe.
+Mỗi xe ra/vào đều phải được đọc biển số bằng một ESP32-CAM gắn trên servo (GPIO 23 của Pi): khi cảm biến cổng nào có xe, Pi xoay camera về cổng đó (vào 0°, ra 180°) rồi mới báo server chụp. Hai cổng cùng có xe thì **cổng ra được quét trước**, xe vào chờ (màn hình hiện "Vui long cho"). Không gắn servo: xoá mục `cam_mount` trong `config.yaml`, đặt camera nhìn cả hai làn và chia vùng ảnh mỗi làn một nửa trên trang Thiết bị.
 
 ```
  xe tới cổng ─► Pi (siêu âm) ──"arrive"──► server ──GET /capture──► ESP32-CAM
@@ -245,7 +245,7 @@ Mỗi xe ra/vào đều phải được đọc biển số. Một ESP32-CAM đ�
              không đọc được / trùng xe / không có lượt vào → giữ rào, màn hình báo, bảo vệ xử lý tay trên dashboard
 ```
 
-1. **Nạp firmware** `esp32_cam/esp32_cam.ino` (hướng dẫn ở đầu file): sửa WiFi và `CAM_KEY`, xem IP trên Serial Monitor.
+1. **Nạp firmware** `esp32_cam/esp32_cam.ino` (hướng dẫn ở đầu file): chép `secrets.example.h` thành `secrets.h` rồi điền WiFi và `CAM_KEY` (file này không lên git), xem IP trên Serial Monitor.
 2. **Mô hình**: train trong `D:\model_training` (`prepare_plates.py` → `train_plate.ipynb`), notebook tự chép
    `plate_det.pt`, `plate_ocr.pt`, `plate_ocr.json` vào `pc_server/models/`.
 3. **Dashboard → Thiết bị → Camera biển số**: nhập `http://<ip-esp32>` và khóa, bấm *Chụp xem*, chỉnh vùng cổng vào

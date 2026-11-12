@@ -9,7 +9,7 @@ import threading
 import time
 from pathlib import Path
 
-from hardware import (load_config, make_barrier, make_camera, make_display, make_leds,
+from hardware import (load_config, make_barrier, make_cam_mount, make_camera, make_display, make_leds,
                       make_sensor)
 from link import PiLink
 
@@ -89,9 +89,10 @@ class Display:
 class Gate(threading.Thread):
     """Máy trạng thái của một cổng: IDLE -> (xe tới) -> OPEN -> (xe đi khuất) -> CLOSING -> IDLE."""
 
-    def __init__(self, name, sensor, barrier, link, display, cfg):
+    def __init__(self, name, sensor, barrier, link, display, cfg, cam=None):
         super().__init__(daemon=True)
         self.name, self.sensor, self.barrier = name, sensor, barrier
+        self.cam = cam   # servo xoay ESP32-CAM dùng chung 2 cổng (None = camera cố định)
         self.link, self.display, self.cfg = link, display, cfg
         self.clear_delay = cfg["gates"]["clear_delay_s"]
         # cảm biến trống ít nhất bấy nhiêu giây rồi lại có vật -> coi là XE MỚI (xe sau nối đuôi khi rào còn mở)
@@ -166,11 +167,33 @@ class Gate(threading.Thread):
     def on_arrival(self):
         self.clear_since = None
         print(f"[gate {self.name}] phát hiện xe ({self.sensor.distance:.0f} cm)")
-        res = self.link.request(self.name, self.timeout)
+        res = self._request()
         if self.name == "in":
             self._entry(res)
         else:
             self._exit(res)
+
+    def _request(self):
+        """Xin server đọc biển + xử lý. Có servo camera: chờ tới lượt (cổng ra ưu tiên), xoay camera về cổng này rồi mới hỏi."""
+        if self.cam is None:
+            return self.link.request(self.name, self.timeout)
+        other = "xe vao" if self.name == "out" else "xe ra"
+
+        def on_wait():
+            print(f"[gate {self.name}] camera đang quét {other}, chờ lượt")
+            self.display.flash(lambda: self.display.oled.message(["Vui long cho", f"Dang quet {other}"], big=True),
+                               self.timeout + 3)
+        try:
+            waited = self.cam.acquire(self.name, timeout=self.timeout * 2 + 5, on_wait=on_wait)
+            if waited > 0.05:
+                print(f"[gate {self.name}] camera sẵn sàng sau {waited:.1f}s")
+        except TimeoutError as e:   # không giành được camera: vẫn hỏi server (sẽ báo không đọc được biển -> bảo vệ xử lý)
+            print(f"[gate {self.name}] {e}")
+            return self.link.request(self.name, self.timeout)
+        try:
+            return self.link.request(self.name, self.timeout)
+        finally:
+            self.cam.release(self.name)
 
     def _entry(self, res):
         if res is None:  # mất server -> chế độ offline
@@ -261,7 +284,14 @@ def main():
 
     sensors = {g: make_sensor(cfg, g).start() for g in ("in", "out")}
     barriers = {g: make_barrier(cfg, g) for g in ("in", "out")}
-    gates = {g: Gate(g, sensors[g], barriers[g], link, display, cfg) for g in ("in", "out")}
+    cam_mount = None
+    try:
+        cam_mount = make_cam_mount(cfg)
+        if cam_mount:
+            print(f"[cam] servo xoay ESP32-CAM: GPIO {cfg['cam_mount']['pin']}, ưu tiên cổng ra")
+    except Exception as e:
+        print("[!] Servo xoay camera không khởi tạo được (camera giữ nguyên hướng):", e)
+    gates = {g: Gate(g, sensors[g], barriers[g], link, display, cfg, cam_mount) for g in ("in", "out")}
 
     def on_state(msg):
         leds.apply_slots(msg["slots"])
@@ -300,6 +330,7 @@ def main():
             "dist_in_cm": round(sensors["in"].distance, 1), "dist_out_cm": round(sensors["out"].distance, 1),
             "barrier_in": barriers["in"].state, "barrier_out": barriers["out"].state,
             "gate_in": gates["in"].state, "gate_out": gates["out"].state,
+            "cam_aim": cam_mount.aim if cam_mount else None,
             "cam_fps": camera.stats()["fps"] if camera else 0, "cpu_temp": cpu_temp()}})
         if link.connected != last_conn:
             last_conn = link.connected
@@ -315,6 +346,8 @@ def main():
         b.cleanup()
     for s in sensors.values():
         s.stop()
+    if cam_mount:
+        cam_mount.cleanup()
     leds.cleanup()
     if oled:
         oled.clear()
