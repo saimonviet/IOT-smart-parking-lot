@@ -356,3 +356,7 @@ td.actions .icon-btn { display: inline-grid; }
 .platecam-view img { width: 100%; border-radius: 12px; border: 1px solid var(--card-b); }
 .platecam-view .cam-off { position: relative; min-height: 220px; border: 1px dashed var(--card-b); border-radius: 12px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; }
 @media (max-width: 1000px) { .grid-plates, .platecam { grid-template-columns: 1fr; } }
+
+.flash-row { display: flex; align-items: center; gap: 10px; }
+.flash-row input[type=range] { flex: 1; }
+.flash-row b { min-width: 32px; text-align: right; }

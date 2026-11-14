@@ -41,6 +41,13 @@ export default function PlateCamCard({ status, isAdmin }) {
           <label>Khóa truy cập (CAM_KEY trong firmware)
             <input value={cfg.key} onChange={(e) => setCfg({ ...cfg, key: e.target.value })} placeholder="để trống nếu không đặt" disabled={!isAdmin} />
           </label>
+          <label>Đèn flash khi chụp biển (0 = tắt, 255 = sáng nhất)
+            <div className="flash-row">
+              <input type="range" min="0" max="255" step="5" value={cfg.flash ?? 0}
+                onChange={(e) => setCfg({ ...cfg, flash: Number(e.target.value) })} disabled={!isAdmin} />
+              <b>{cfg.flash ?? 0}</b>
+            </div>
+          </label>
           {GATES.map(([g, name, color]) => (
             <div key={g} className="roi-row">
               <span style={{ color }}>Vùng {name.toLowerCase()}</span>
@@ -66,6 +73,12 @@ export default function PlateCamCard({ status, isAdmin }) {
           {test && (
             <div className={test.plate ? 'notice notice-ok' : 'notice'}>
               {test.plate ? `Đọc được: ${fmtPlate(test.plate)} (${Math.round(test.conf * 100)}%)` : `Không đọc được — ${test.reason}`}
+              {test.timing && (
+                <div className="small">
+                  Mất {(test.timing.read_ms / 1000).toFixed(2)} s: {test.timing.frames} ảnh, chụp {test.timing.capture_ms} ms,
+                  nhận diện {test.timing.detect_ms} ms{test.timing.flash ? ', có flash' : ''}
+                </div>
+              )}
             </div>
           )}
         </div>

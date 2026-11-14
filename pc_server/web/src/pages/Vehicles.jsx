@@ -142,6 +142,11 @@ export default function Vehicles() {
                   <div className="read-side">
                     <span className={`badge ${cls}`}>{text}</span>
                     {r.conf != null && <span className="muted small">{Math.round(r.conf * 100)}%</span>}
+                    {(r.total_ms ?? r.read_ms) != null && (
+                      <span className="muted small" title={`Đọc biển ${r.read_ms ?? '?'} ms · cả lượt ${r.total_ms ?? '?'} ms`}>
+                        {((r.total_ms ?? r.read_ms) / 1000).toFixed(1)} s
+                      </span>
+                    )}
                     {denied && isAdmin && r.result !== 'denied_full' && (
                       <button className="link" onClick={() => setPreset({ gate: r.gate, plate: fmtPlate(r.plate || r.guess || ''), t: Date.now() })}>Xử lý tay</button>
                     )}

@@ -152,13 +152,16 @@ class LotState:
         """Lưu mọi lần đọc biển (kể cả bị từ chối) để tra soát, đẩy lên dashboard theo thời gian thực."""
         if read is None:
             return
-        db.execute("INSERT INTO plate_reads(ts,gate,plate,guess,conf,image,result,visit_id,reason) "
-                   "VALUES(?,?,?,?,?,?,?,?,?)",
-                   (db.now_iso(), gate, read.get("plate"), read.get("guess"), read.get("conf"), read.get("image"),
-                    result, visit_id, read.get("reason")))
+        t = read.get("timing") or {}
+        read["read_id"] = db.execute(
+            "INSERT INTO plate_reads(ts,gate,plate,guess,conf,image,result,visit_id,reason,read_ms) "
+            "VALUES(?,?,?,?,?,?,?,?,?,?)",
+            (db.now_iso(), gate, read.get("plate"), read.get("guess"), read.get("conf"), read.get("image"),
+             result, visit_id, read.get("reason"), t.get("read_ms")))
         self._emit("plate", {"gate": gate, "plate": read.get("plate"), "display": read.get("display"),
                              "guess": read.get("guess"), "conf": read.get("conf"), "image": read.get("image"),
-                             "result": result, "reason": read.get("reason"), "ts": time.time()})
+                             "result": result, "reason": read.get("reason"), "ts": time.time(),
+                             "read_ms": t.get("read_ms")})
 
     def inside_visit(self, plate, exact_only=False):
         """Lượt xe đang trong bãi khớp biển số; cho phép lệch PLATE_MATCH_DIST ký tự nếu chỉ có đúng 1 ứng viên."""

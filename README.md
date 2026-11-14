@@ -263,6 +263,8 @@ Mỗi xe ra/vào đều phải được đọc biển số bằng một ESP32-CA
 | `PLATE_BUDGET` | `4.0` | giây tối đa để đọc biển (tự rút ngắn theo `request_timeout_s` của Pi) |
 | `PLATE_CAM_URL` | (trống) | địa chỉ ESP32-CAM ban đầu; có thể là **thư mục ảnh** để chạy thử không cần ESP32 |
 
+**Đèn flash và thời gian xử lý.** Trang Thiết bị → Camera biển số có thanh *Đèn flash khi chụp biển* (0 = tắt): server bật flash ESP32-CAM ngay trước khi chụp và tắt sau khi đọc xong (thêm ~0,25 s). Mỗi lượt xe được ghi thời gian từng bước vào Nhật ký (loại `timing`, ví dụ *Cổng vào: 51G-123.45, cho qua — tổng 640 ms, đọc biển 610 ms = 2 ảnh (chụp 420 ms, nhận diện 150 ms)*), cột thời gian ở trang Xe ra vào, và dòng `[timing in]` trên console của Pi (gồm cả thời gian chờ camera xoay và mạng). Lượt quá 4 s được đánh dấu cảnh báo.
+
 Chạy thử không cần ESP32: `$env:PLATE_CAM_URL="D:\model_training\data\plates\det\images\test"` — mỗi lượt xe dùng ảnh tiếp theo.
 
 ## Thứ tự làm đề xuất

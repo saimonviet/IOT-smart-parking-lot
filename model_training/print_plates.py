@@ -5,6 +5,10 @@ Kết quả: data/plates/print/bien_so_A4.png (300 dpi, in đúng tỉ lệ 100%
 
   python print_plates.py --plates 51G12345 30A98765 59X123456 --width-mm 40
   python print_plates.py --random 12 --width-mm 35
+  python print_plates.py --random 6 --color yellow        (biển vàng xe kinh doanh)
+
+Chọn cỡ: biển phải rộng >= ~120 px trong ảnh ESP32-CAM (XGA 1024 px, góc nhìn ~66°)
+  -> chiều rộng biển (mm) >= 1.5 x khoảng cách camera-biển (cm). Vd. camera cách 25 cm -> biển >= 38 mm.
 """
 import argparse
 import random
@@ -40,6 +44,7 @@ def main():
     ap.add_argument("--random", type=int, default=0)
     ap.add_argument("--width-mm", type=float, default=40, help="chiều rộng biển dài khi in (mm)")
     ap.add_argument("--square", action="store_true", help="in biển ô tô dạng vuông 2 dòng")
+    ap.add_argument("--color", choices=["white", "yellow"], default="white", help="white = xe cá nhân | yellow = xe kinh doanh")
     args = ap.parse_args()
     labels = [L.clean(p) for p in args.plates]
     while len(labels) < len(args.plates) + args.random:
@@ -47,6 +52,14 @@ def main():
         if kind != "moto" or random.random() < 0.3:
             labels.append(lab)
     r = L.PlateRenderer()
+    bg_color = (255, 255, 255) if args.color == "white" else (40, 200, 245)   # BGR
+
+    def base(kind, w, h):
+        bg = np.full((h, w, 3), bg_color, np.uint8)
+        t = max(2, h // 28)
+        cv2.rectangle(bg, (t, t), (w - t - 1, h - t - 1), (20, 20, 20), t)
+        return bg
+    r._base = base
     page = np.full((A4[1], A4[0], 3), 255, np.uint8)
     margin = int(10 / 25.4 * DPI)
     x, y, row_h = margin, margin, 0
@@ -56,8 +69,7 @@ def main():
             m = L.PLATE_RE.match(lab)
             num = m.group(3)
             top, bottom, kind = m.group(1) + m.group(2), (f"{num[:3]}.{num[3:]}" if len(num) == 5 else num), "car_square"
-        # nền trắng chuẩn (không lấy ảnh nền ngẫu nhiên)
-        r.bgs = {"rec": [], "square": []}
+        # nền màu đồng nhất + viền đen (không lấy ảnh nền / màu ngẫu nhiên)
         random.seed(0)
         img = r.render(top, bottom, kind)
         wmm = args.width_mm if kind == "car_long" else args.width_mm * (330 / 520 if kind == "car_square" else 280 / 520)

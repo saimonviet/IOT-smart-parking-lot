@@ -167,11 +167,24 @@ class Gate(threading.Thread):
     def on_arrival(self):
         self.clear_since = None
         print(f"[gate {self.name}] phát hiện xe ({self.sensor.distance:.0f} cm)")
+        t0 = time.time()
         res = self._request()
+        t_res = time.time()
         if self.name == "in":
             self._entry(res)
         else:
             self._exit(res)
+        self._log_timing(res, t0, t_res)
+
+    def _log_timing(self, res, t0, t_res):
+        """In thời gian một lượt xe: chờ camera + server xử lý -> quyết định -> lệnh mở rào."""
+        t = (res or {}).get("timing") or {}
+        srv = f"server {t['total_ms']} ms" if "total_ms" in t else ("mất server" if res is None else "server ?")
+        if "read_ms" in t:
+            srv += f" (đọc biển {t['read_ms']} ms, {t.get('frames', 0)} ảnh)"
+        net = (t_res - t0) * 1000 - t.get("total_ms", 0)
+        verdict = "MỞ RÀO" if self.state == "OPEN" else "giữ rào"
+        print(f"[timing {self.name}] {verdict} sau {time.time() - t0:.2f}s — {srv}, chờ camera + mạng ~{max(0, net):.0f} ms")
 
     def _request(self):
         """Xin server đọc biển + xử lý. Có servo camera: chờ tới lượt (cổng ra ưu tiên), xoay camera về cổng này rồi mới hỏi."""

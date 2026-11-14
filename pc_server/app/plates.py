@@ -91,6 +91,7 @@ DEFAULT_CAM = {
     # vùng ảnh (tỉ lệ 0–1: x1, y1, x2, y2) của từng làn. Mặc định cả khung hình: Pi xoay camera (servo) về đúng cổng.
     # Camera cố định nhìn cả hai làn thì chia đôi, vd. in [0, 0, 0.5, 1] và out [0.5, 0, 1, 1].
     "roi": {"in": [0.0, 0.0, 1.0, 1.0], "out": [0.0, 0.0, 1.0, 1.0]},
+    "flash": 0,                    # độ sáng đèn flash ESP32-CAM khi chụp biển (0 = tắt, 1–255)
 }
 
 
@@ -154,6 +155,21 @@ class PlateCamera:
         with urllib.request.urlopen(full, timeout=timeout) as r:
             data = r.read()
         return cv2.imdecode(np.frombuffer(data, np.uint8), cv2.IMREAD_COLOR)
+
+    def set_flash(self, level):
+        """Bật/tắt đèn flash GPIO4 của ESP32-CAM (/control?flash=0..255). Lỗi thì bỏ qua — chỉ là hỗ trợ ánh sáng."""
+        url = (self.cfg.get("url") or "").strip()
+        if not url.startswith("http"):
+            return False
+        q = {"flash": int(max(0, min(255, level)))}
+        if self.cfg.get("key"):
+            q["key"] = self.cfg["key"]
+        try:
+            with urllib.request.urlopen(f"{url.rstrip('/')}/control?{urllib.parse.urlencode(q)}", timeout=1.0) as r:
+                r.read()
+            return True
+        except Exception:
+            return False
 
     def _grab_file(self, path):
         """Chạy thử không cần ESP32: một ảnh, hoặc thư mục ảnh (lần lượt từng ảnh mỗi lần xe tới)."""
@@ -228,6 +244,14 @@ class PlateModel:
         except Exception as e:
             self.error = f"Mô hình biển số: {e}"
             print("[plate]", self.error)
+            return
+        # chạy nháp 1 lần: lần suy luận đầu chậm (~2 s: khởi tạo YOLO/torch), không để xe đầu tiên phải chờ
+        try:
+            t = time.time()
+            self.recognize(np.zeros((480, 640, 3), np.uint8))
+            print(f"[plate] mô hình sẵn sàng (khởi động nóng {time.time() - t:.1f}s)")
+        except Exception as e:
+            print("[plate] khởi động nóng lỗi (bỏ qua):", e)
 
     @property
     def ready(self):
@@ -314,12 +338,30 @@ class PlateReader:
                 "model_error": m.error if m else "", "roi": self.cam.cfg.get("roi"),
                 "required": config.PLATE_REQUIRED, "recent": self.recent[:8]}
 
+    FLASH_WARMUP_S = 0.25   # chờ cảm biến ảnh chỉnh lại độ phơi sáng sau khi bật flash
+
     def read(self, gate, budget=2.0):
         """Đọc biển số ở một cổng trong tối đa `budget` giây.
 
-        Trả về dict: plate (chuẩn hóa hoặc None), display, conf, valid, image (đường dẫn ảnh bằng chứng), reason.
+        Trả về dict: plate (chuẩn hóa hoặc None), display, conf, valid, image (đường dẫn ảnh bằng chứng), reason,
+        timing {frames, capture_ms, detect_ms, read_ms} để biết chậm ở bước nào.
         """
         t0 = time.time()
+        self._t = {"frames": 0, "capture_ms": 0, "detect_ms": 0, "flash": False}
+        flash = int(self.cam.cfg.get("flash") or 0)
+        if flash > 0 and self.enabled:
+            self._t["flash"] = self.cam.set_flash(flash)
+            if self._t["flash"]:
+                time.sleep(self.FLASH_WARMUP_S)
+        try:
+            res = self._read(gate, budget, t0)
+        finally:
+            if self._t["flash"]:
+                self.cam.set_flash(0)
+        res["timing"] = {**self._t, "read_ms": int((time.time() - t0) * 1000)}
+        return res
+
+    def _read(self, gate, budget, t0):
         model = self.ensure_model()
         if not self.enabled:
             return self._done(gate, None, 0.0, None, "Chưa cấu hình camera biển số")
@@ -329,12 +371,17 @@ class PlateReader:
         best_img, best_score, frames = None, -1.0, 0
         roi = (self.cam.cfg.get("roi") or {}).get(gate)
         while frames < config.PLATE_MAX_FRAMES and time.time() - t0 < budget:
+            tc = time.time()
             img = self.cam.grab(timeout=max(0.3, budget - (time.time() - t0)))
+            self._t["capture_ms"] += int((time.time() - tc) * 1000)
             if img is None:
                 break
             frames += 1
+            self._t["frames"] = frames
             view, (ox, oy) = _crop_roi(img, roi)
+            td = time.time()
             reads = model.recognize(view)
+            self._t["detect_ms"] += int((time.time() - td) * 1000)
             if reads:
                 plate, conf, box = reads[0]  # biển lớn nhất trong làn = xe đang ở cổng
                 score = conf * (1.0 if is_valid(plate) else 0.3)

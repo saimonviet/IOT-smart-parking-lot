@@ -586,6 +586,7 @@ async def handle_pi_message(conn, msg, ip):
 
 async def process_arrival(conn, gate, pi_timeout=None):
     gate = "in" if gate == "in" else "out"
+    t0 = time.time()
     read = None
     if plates.enabled:
         # trả lời trước khi Pi hết kiên nhẫn (Pi quá hạn sẽ tự chuyển chế độ offline)
@@ -597,10 +598,28 @@ async def process_arrival(conn, gate, pi_timeout=None):
     else:
         res = state.handle_exit(read)
         body = {"type": "exit_result", **res}
+    timing = {**((read or {}).get("timing") or {}), "total_ms": int((time.time() - t0) * 1000)}
+    body["timing"] = timing
     try:
         await conn.send(body)
     except Exception as e:
         print("[pi] không gửi được kết quả cổng:", e)
+    _log_timing(gate, read, res, timing)
+
+
+def _log_timing(gate, read, res, t):
+    """Ghi thời gian từng bước của một lượt xe vào nhật ký để biết chậm ở đâu (chụp ảnh / nhận diện / xử lý)."""
+    if read and read.get("read_id"):
+        db.execute("UPDATE plate_reads SET total_ms=? WHERE id=?", (t["total_ms"], read["read_id"]))
+    parts = [f"tổng {t['total_ms']} ms"]
+    if "read_ms" in t:
+        parts.append(f"đọc biển {t['read_ms']} ms = {t['frames']} ảnh (chụp {t['capture_ms']} ms, "
+                     f"nhận diện {t['detect_ms']} ms{', có flash' if t.get('flash') else ''})")
+    who = (read or {}).get("display") or (read or {}).get("guess") or "không rõ biển"
+    verdict = "cho qua" if res.get("allowed") else "từ chối"
+    msg = f"Cổng {'vào' if gate == 'in' else 'ra'}: {who}, {verdict} — " + ", ".join(parts)
+    print("[timing]", msg)
+    state.log("warn" if t["total_ms"] > 4000 else "info", "timing", msg)
 
 
 # ----------------------------------------------------------------- biển số / lượt xe
@@ -608,6 +627,7 @@ class PlateCamBody(BaseModel):
     url: str = ""
     key: str = ""
     roi: dict
+    flash: int = 0
 
 
 def _check_roi(roi):
@@ -634,7 +654,9 @@ def put_plate_cam(body: PlateCamBody, user=Depends(auth.require_admin)):
     url = body.url.strip()
     if url and not (url.startswith(("http://", "https://")) or Path(url).exists()):
         raise HTTPException(400, "URL phải là http://<ip-esp32> (hoặc đường dẫn ảnh/thư mục có thật để chạy thử)")
-    cfg = {"url": url, "roi": _check_roi(body.roi),
+    if not 0 <= body.flash <= 255:
+        raise HTTPException(400, "Độ sáng flash phải trong khoảng 0–255")
+    cfg = {"url": url, "roi": _check_roi(body.roi), "flash": body.flash,
            "key": plates.cam.cfg.get("key", "") if body.key == "••••" else body.key.strip()}
     save_cam(cfg)
     plates.cam.configure(cfg)
