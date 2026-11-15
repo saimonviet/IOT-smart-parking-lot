@@ -360,3 +360,5 @@ td.actions .icon-btn { display: inline-grid; }
 .flash-row { display: flex; align-items: center; gap: 10px; }
 .flash-row input[type=range] { flex: 1; }
 .flash-row b { min-width: 32px; text-align: right; }
+.check-row { display: flex !important; flex-direction: row !important; align-items: center; gap: 8px; }
+.check-row input { width: auto !important; }

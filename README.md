@@ -235,11 +235,11 @@ Trên dashboard, thanh trên cùng sẽ báo Raspberry Pi và Camera chuyển sa
 
 ## Nhận diện biển số (ESP32-CAM)
 
-Mỗi xe ra/vào đều phải được đọc biển số bằng một ESP32-CAM gắn trên servo (GPIO 23 của Pi): khi cảm biến cổng nào có xe, Pi xoay camera về cổng đó (vào 0°, ra 180°) rồi mới báo server chụp. Hai cổng cùng có xe thì **cổng ra được quét trước**, xe vào chờ (màn hình hiện "Vui long cho"). Không gắn servo: xoá mục `cam_mount` trong `config.yaml`, đặt camera nhìn cả hai làn và chia vùng ảnh mỗi làn một nửa trên trang Thiết bị.
+Mỗi xe ra/vào đều phải được đọc biển số bằng **một ESP32-CAM gắn trên động cơ bước 28BYJ-48** (mạch ULN2003 nối vào GPIO 14/15/13/12 của chính ESP32-CAM — Pi không còn chân trống). Cảm biến cổng nào có xe → Pi báo server → server gọi `/aim?gate=in|out`, ESP32 quay camera về cổng đó (chờ hết rung) → server chụp liền 3 ảnh → nhận diện → bỏ phiếu. Hai cổng cùng có xe thì **cổng ra được quét trước**, xe vào xếp hàng chờ (server điều phối, một lượt đang đọc không bị ngắt). Vị trí 2 cổng chỉnh bằng nút nhích ±16/±128 bước trên trang cài đặt của ESP32 (`http://<ip>/?key=...`) rồi bấm "Lưu chỗ này = cổng VÀO/RA"; vị trí được nhớ qua mất điện. Bật "Camera xoay bằng động cơ bước" ở trang Thiết bị. Không dùng động cơ: tắt ô đó, đặt camera nhìn cả hai làn và chia vùng ảnh mỗi làn một nửa.
 
 ```
  xe tới cổng ─► Pi (siêu âm) ──"arrive"──► server ──GET /capture──► ESP32-CAM
-                                            │  cắt vùng làn vào/ra → YOLO tìm biển → CRNN đọc chữ → bỏ phiếu 2–4 ảnh
+                                            │  chụp liền 3 ảnh → YOLO tìm biển → CRNN đọc chữ → bỏ phiếu
                                             ▼
              vào: biển mới → ghi lượt + cấp ô  │  ra: khớp lượt vào (lệch ≤1 ký tự) → tính phí → mở rào
              không đọc được / trùng xe / không có lượt vào → giữ rào, màn hình báo, bảo vệ xử lý tay trên dashboard
@@ -260,6 +260,8 @@ Mỗi xe ra/vào đều phải được đọc biển số bằng một ESP32-CA
 | `PLATE_REQUIRED` | `1` | `1` = không đọc được biển thì không mở rào; `0` = vẫn cho qua, chỉ ghi cảnh báo |
 | `PLATE_MIN_CONF` | `0.5` | dưới ngưỡng tin cậy này coi như không đọc được |
 | `PLATE_MATCH_DIST` | `1` | cổng ra chấp nhận lệch tối đa n ký tự so với lúc vào (khi chỉ có 1 xe khớp) |
+| `PLATE_FRAMES` | `3` | số ảnh chụp liền mỗi lượt xe; chụp xong mới nhận diện cả loạt rồi bỏ phiếu |
+| `PLATE_FRAME_GAP_S` | `0.1` | nghỉ giữa 2 lần chụp |
 | `PLATE_BUDGET` | `4.0` | giây tối đa để đọc biển (tự rút ngắn theo `request_timeout_s` của Pi) |
 | `PLATE_CAM_URL` | (trống) | địa chỉ ESP32-CAM ban đầu; có thể là **thư mục ảnh** để chạy thử không cần ESP32 |
 

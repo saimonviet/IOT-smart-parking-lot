@@ -589,8 +589,10 @@ async def process_arrival(conn, gate, pi_timeout=None):
     t0 = time.time()
     read = None
     if plates.enabled:
-        # trả lời trước khi Pi hết kiên nhẫn (Pi quá hạn sẽ tự chuyển chế độ offline)
-        budget = max(0.8, min(config.PLATE_BUDGET, float(pi_timeout or 3.0) - 1.0))
+        # trả lời trước khi Pi hết kiên nhẫn (Pi quá hạn sẽ tự chuyển chế độ offline).
+        # budget gồm cả chờ lượt camera (cổng kia đang đọc) + xoay động cơ bước + chụp + nhận diện
+        cap = config.PLATE_BUDGET + (config.PLATE_AIM_MAX_S + config.PLATE_BUDGET if plates.cam.cfg.get("aim") else 0)
+        budget = max(0.8, min(cap, float(pi_timeout or 3.0) - 1.0))
         read = await asyncio.get_running_loop().run_in_executor(None, plates.read, gate, budget)
     if gate == "in":
         res = state.handle_entry(read)
@@ -612,9 +614,15 @@ def _log_timing(gate, read, res, t):
     if read and read.get("read_id"):
         db.execute("UPDATE plate_reads SET total_ms=? WHERE id=?", (t["total_ms"], read["read_id"]))
     parts = [f"tổng {t['total_ms']} ms"]
+    if t.get("wait_ms", 0) > 50:
+        parts.append(f"chờ cổng kia {t['wait_ms']} ms")
+    if t.get("aim_ms"):
+        parts.append(f"xoay camera {t['aim_ms']} ms")
     if "read_ms" in t:
         parts.append(f"đọc biển {t['read_ms']} ms = {t['frames']} ảnh (chụp {t['capture_ms']} ms, "
                      f"nhận diện {t['detect_ms']} ms{', có flash' if t.get('flash') else ''})")
+        if t.get("per_frame"):
+            parts.append("từng ảnh: " + " | ".join(p or "không thấy" for p in t["per_frame"]))
     who = (read or {}).get("display") or (read or {}).get("guess") or "không rõ biển"
     verdict = "cho qua" if res.get("allowed") else "từ chối"
     msg = f"Cổng {'vào' if gate == 'in' else 'ra'}: {who}, {verdict} — " + ", ".join(parts)
@@ -628,6 +636,7 @@ class PlateCamBody(BaseModel):
     key: str = ""
     roi: dict
     flash: int = 0
+    aim: bool = False
 
 
 def _check_roi(roi):
@@ -656,7 +665,7 @@ def put_plate_cam(body: PlateCamBody, user=Depends(auth.require_admin)):
         raise HTTPException(400, "URL phải là http://<ip-esp32> (hoặc đường dẫn ảnh/thư mục có thật để chạy thử)")
     if not 0 <= body.flash <= 255:
         raise HTTPException(400, "Độ sáng flash phải trong khoảng 0–255")
-    cfg = {"url": url, "roi": _check_roi(body.roi), "flash": body.flash,
+    cfg = {"url": url, "roi": _check_roi(body.roi), "flash": body.flash, "aim": body.aim,
            "key": plates.cam.cfg.get("key", "") if body.key == "••••" else body.key.strip()}
     save_cam(cfg)
     plates.cam.configure(cfg)
@@ -694,7 +703,24 @@ def plate_cam_test(body: GateBody, user=Depends(auth.require_admin)):
     """Đọc thử biển số ở một cổng (không mở rào, không ghi lượt xe)."""
     if body.gate not in ("in", "out"):
         raise HTTPException(400, "gate phải là in hoặc out")
-    return plates.read(body.gate, budget=config.PLATE_BUDGET)
+    return plates.read(body.gate)
+
+
+@app.post("/api/plate-cam/aim")
+def plate_cam_aim(body: GateBody, user=Depends(auth.require_admin)):
+    """Bấm nút trên dashboard: ESP32 quay động cơ bước về cổng (xếp lượt với các lần đọc biển đang chạy)."""
+    if body.gate not in ("in", "out"):
+        raise HTTPException(400, "gate phải là in hoặc out")
+    if not plates.queue.acquire(body.gate, timeout=config.PLATE_AIM_MAX_S + config.PLATE_BUDGET, use_window=False):
+        raise HTTPException(409, "Camera đang bận đọc biển, thử lại sau")
+    try:
+        t = time.time()
+        r = plates.cam.aim(body.gate, timeout=config.PLATE_AIM_MAX_S)
+    finally:
+        plates.queue.release(body.gate)
+    if r is None:
+        raise HTTPException(502, plates.cam.error or "ESP32 không trả lời")
+    return {**r, "ms": int((time.time() - t) * 1000)}
 
 
 @app.post("/api/plate-cam/reload-model")

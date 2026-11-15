@@ -27,6 +27,8 @@ export default function PlateCamCard({ status, isAdmin }) {
   const save = () => run(() => api('/plate-cam', { method: 'PUT', body: cfg }), () => { setSnap(Date.now()); return 'Đã lưu cấu hình camera biển số' })
   const doTest = (g) => run(async () => { const r = await api('/plate-cam/test', { method: 'POST', body: { gate: g } }); setTest(r); return r })
   const reload = () => run(() => api('/plate-cam/reload-model', { method: 'POST' }), () => 'Đã nạp lại mô hình biển số')
+  const aim = (g, name) => run(() => api('/plate-cam/aim', { method: 'POST', body: { gate: g } }),
+    (r) => { setSnap(Date.now()); return r.moved ? `Đã xoay camera về ${name.toLowerCase()} (${(r.ms / 1000).toFixed(1)} s)` : `Camera đã nhìn ${name.toLowerCase()} sẵn` })
 
   return (
     <section className="card wide-plate">
@@ -40,6 +42,10 @@ export default function PlateCamCard({ status, isAdmin }) {
           </label>
           <label>Khóa truy cập (CAM_KEY trong firmware)
             <input value={cfg.key} onChange={(e) => setCfg({ ...cfg, key: e.target.value })} placeholder="để trống nếu không đặt" disabled={!isAdmin} />
+          </label>
+          <label className="check-row">
+            <input type="checkbox" checked={!!cfg.aim} onChange={(e) => setCfg({ ...cfg, aim: e.target.checked })} disabled={!isAdmin} />
+            Camera xoay bằng động cơ bước trên ESP32 (xoay về cổng có xe rồi mới chụp; xe ra được ưu tiên)
           </label>
           <label>Đèn flash khi chụp biển (0 = tắt, 255 = sáng nhất)
             <div className="flash-row">
@@ -67,6 +73,16 @@ export default function PlateCamCard({ status, isAdmin }) {
             ))}
             <button className="btn" disabled={!isAdmin || busy} onClick={reload}>Nạp lại mô hình</button>
           </div>
+          {cfg.aim && (
+            <div className="btn-row">
+              <span className="muted small">Động cơ bước:</span>
+              {GATES.map(([g, name]) => (
+                <button key={g} className="btn" disabled={!isAdmin || busy || !status?.enabled} onClick={() => aim(g, name)}>
+                  Xoay về {name.toLowerCase()}
+                </button>
+              ))}
+            </div>
+          )}
           <div className="row"><span className="muted">Mô hình</span><b>{status?.model_ready ? 'Sẵn sàng' : (status?.model_error || 'Chưa nạp')}</b></div>
           <div className="row"><span className="muted">Bắt buộc đọc được biển</span><b>{status?.required ? 'Có' : 'Không'}</b></div>
           {status?.error && <div className="notice">{status.error}</div>}
@@ -77,6 +93,7 @@ export default function PlateCamCard({ status, isAdmin }) {
                 <div className="small">
                   Mất {(test.timing.read_ms / 1000).toFixed(2)} s: {test.timing.frames} ảnh, chụp {test.timing.capture_ms} ms,
                   nhận diện {test.timing.detect_ms} ms{test.timing.flash ? ', có flash' : ''}
+                  {test.timing.aim_ms ? `, xoay camera ${test.timing.aim_ms} ms` : ''}
                 </div>
               )}
             </div>

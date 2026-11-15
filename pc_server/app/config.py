@@ -89,7 +89,10 @@ PLATE_OCR_MODEL = Path(_env("PLATE_OCR_MODEL", str(BASE_DIR / "models" / "plate_
 PLATE_DET_CONF = float(_env("PLATE_DET_CONF", "0.35"))
 PLATE_DET_IMGSZ = int(_env("PLATE_DET_IMGSZ", "640"))
 PLATE_MIN_CONF = float(_env("PLATE_MIN_CONF", "0.5"))   # dưới ngưỡng này coi như KHÔNG đọc được
-PLATE_MAX_FRAMES = int(_env("PLATE_MAX_FRAMES", "4"))   # số ảnh tối đa mỗi lượt (bỏ phiếu)
+# mỗi lượt xe: chụp liền PLATE_FRAMES ảnh từ ESP32-CAM rồi mới nhận diện cả loạt và bỏ phiếu
+PLATE_FRAMES = max(1, int(_env("PLATE_FRAMES", _env("PLATE_MAX_FRAMES", "3"))))
+PLATE_AIM_MAX_S = float(_env("PLATE_AIM_MAX_S", "6"))   # chờ ESP32 quay động cơ bước về cổng tối đa (giây)
+PLATE_FRAME_GAP_S = float(_env("PLATE_FRAME_GAP_S", "0.1"))   # nghỉ giữa 2 lần chụp (ảnh khác nhau chút -> bỏ phiếu có ý nghĩa)
 PLATE_BUDGET = float(_env("PLATE_BUDGET", "4.0"))       # giây tối đa để đọc biển (còn bị giới hạn theo timeout của Pi)
 # 1 = bắt buộc đọc được biển mới cho vào/ra (đúng nghiệp vụ); 0 = không đọc được vẫn cho qua, chỉ ghi cảnh báo
 PLATE_REQUIRED = _env("PLATE_REQUIRED", "1") == "1"
