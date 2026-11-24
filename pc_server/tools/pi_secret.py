@@ -18,4 +18,4 @@ server:
   key: "{config.PI_KEY}"
   fingerprint: "{tls.fingerprint()}"
   reconnect_s: 3
-  request_timeout_s: 3""")
+  request_timeout_s: 15""")

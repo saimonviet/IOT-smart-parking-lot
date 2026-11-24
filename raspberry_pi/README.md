@@ -1,33 +1,50 @@
 # Raspberry Pi 3 — bãi đỗ xe thông minh
 
-Pi làm 4 việc: đọc 2 cảm biến siêu âm, điều khiển 2 rào chắn, bật/tắt 10 đèn LED (ô A1–C4) + màn hình TFT 2.8", và stream camera.
-Mọi quyết định (ô nào trống, chỉ ô nào cho xe vào) do `pc_server` đưa ra qua WebSocket.
+Pi làm 4 việc: đọc 2 cảm biến siêu âm ở cổng, điều khiển 2 rào chắn servo, bật/tắt đèn LED từng ô + màn TFT ở cổng vào,
+và stream camera bãi đỗ cho server. Mọi quyết định (ô nào trống, cho xe vào/ra, đọc biển số bằng ESP32-CAM) do
+`pc_server` đưa ra qua kênh WebSocket bảo mật. Pi chỉ báo "có xe ở cổng" rồi làm theo kết quả.
+
+## Cấu trúc
+
+```
+raspberry_pi/
+├── main.py              # khởi tạo linh kiện, nối với server, vòng lặp gửi số liệu
+├── config.yaml          # chân cắm, góc servo, địa chỉ + khóa server (nguồn duy nhất về số chân)
+├── requirements.txt
+├── test_hardware.py     # test từng linh kiện, không cần server
+├── core/                # logic, không phụ thuộc phần cứng
+│   ├── gate.py          #   máy trạng thái 1 cổng: chờ xe → hỏi server → mở/giữ rào → đóng
+│   ├── screen.py        #   điều phối màn hình: màn chờ / hướng dẫn xe vào / thông báo
+│   ├── link.py          #   kết nối wss tới server, tự kết nối lại
+│   └── secure_channel.py#   bắt tay HMAC + ký từng tin (bản giống hệt pc_server/app/secure_channel.py)
+└── hardware/            # driver từng linh kiện, tạo từ config.yaml qua hardware/__init__.py
+    ├── ultrasonic.py    #   HC-SR04
+    ├── barrier.py       #   rào servo SG90
+    ├── leds.py          #   đèn từng ô
+    ├── tft.py           #   màn TFT SPI (ILI9341/ST7735/ST7789)
+    └── camera.py        #   Pi Camera → MJPEG :8081
+```
 
 ## 1. Đấu nối
 
-Bảng chân, sơ đồ header 40 chân và cách nối từng linh kiện nằm ở [README chính](../README.md#hướng-dẫn-cắm-chân-raspberry-pi-3).
-Tóm tắt (GPIO / chân vật lý):
+Số chân (BCM) lấy theo `config.yaml`. Sơ đồ header 40 chân và cách nối từng loại linh kiện ở
+[README chính](../README.md#hướng-dẫn-cắm-chân-raspberry-pi-3). Nếu cắm khác, chỉ cần sửa `config.yaml`, không phải sửa code.
 
-| Linh kiện | GPIO | Chân vật lý |
-|---|---|---|
-| LED A1, A2, A3 | 14, 15, 18 | 8, 10, 12 |
-| LED B1, B2, B3 | 20, 21, 4 | 38, 40, 7 |
-| LED C1, C2, C3, C4 | 17, 27, 22, 3 | 11, 13, 15, 5 |
-| Servo vào / ra | 12 / 24 | 32 / 18 |
-| Siêu âm vào TRIG / ECHO* | 5 / 25 | 29 / 22 |
-| Siêu âm ra TRIG / ECHO* | 7 / 1 | 26 / 28 |
-| TFT 2.8" ILI9341 SCK / SDI(MOSI) / CS (SPI0) | 11 / 10 / 8 | 23 / 19 / 24 |
-| TFT DC / RESET | 2 / 16 | 3 / 36 |
-| TFT VCC / LED (đèn nền) / GND | 3.3V / 3.3V / GND | 1 / 17 / 20 |
-
-\* ECHO qua cầu chia áp 1kΩ/2kΩ. Servo và LED: xem lưu ý về nguồn và điện trở trong README chính.
+| Linh kiện | Mục trong config.yaml |
+|---|---|
+| Siêu âm cổng vào / ra (ECHO qua cầu chia áp 1kΩ/2kΩ) | `gates.in`, `gates.out` |
+| Servo rào vào / ra (nguồn 5V riêng, GND chung) | `barrier.in_pin`, `barrier.out_pin` + góc đóng/mở |
+| Đèn LED từng ô, theo thứ tự ô trên server | `leds.pins` |
+| Màn TFT 2.8" (SPI0: SCK 11, MOSI 10, CS 8) | `tft.dc`, `tft.rst` |
+| Pi Camera | khe CSI, mục `camera` |
 
 ## 2. Cài đặt (Raspberry Pi OS)
 
 ```bash
-# Cấu hình chân (bắt buộc với bộ chân này): SPI0 chỉ 1 CS cho TFT (GPIO 7 vẫn là TRIG RA); tắt serial (GPIO 14, 15 dùng cho LED)
+# SPI0 chỉ 1 CS cho TFT (qua overlay spi0-1cs, GPIO 7 vẫn dùng được cho LED A2);
+# tắt I2C (GPIO 2/3 dùng cho TFT DC, LED C4) và serial (GPIO 14/15 dùng cho siêu âm cổng ra)
 sudo raspi-config nonint do_spi 1
-sudo raspi-config nonint do_i2c 1             # tắt I2C: GPIO 2/3 dùng cho TFT DC và LED C4
+sudo raspi-config nonint do_i2c 1
 echo "dtoverlay=spi0-1cs" | sudo tee -a /boot/firmware/config.txt   # bản OS cũ: /boot/config.txt
 sudo raspi-config nonint do_serial_cons 1
 sudo raspi-config nonint do_serial_hw 1
@@ -40,53 +57,54 @@ cd raspberry_pi                                # KHÔNG dùng sudo cho các lệ
 python3 -m venv --system-site-packages .venv   # --system-site-packages để dùng được picamera2, gpiozero, lgpio
 source .venv/bin/activate
 pip install -r requirements.txt
-nano config.yaml                               # mục server: dán đoạn do `python tools/pi_secret.py` (trên máy chạy pc_server) in ra
+nano config.yaml                               # mục server: dán đoạn do `python tools/pi_secret.py` (máy chạy pc_server) in ra
 ```
 
-## 3. Kiểm tra linh kiện TRƯỚC (`test_hardware.py`)
-
-```bash
-python test_hardware.py            # menu: chọn từng bài hoặc 'a' = chạy tất cả
-python test_hardware.py leds       # đèn sáng lần lượt A1 → C4, rồi ngược lại, rồi nhấp nháy
-python test_hardware.py ledson     # bật sáng TẤT CẢ đèn, giữ tới khi nhấn Enter / Ctrl+C
-python test_hardware.py ultrasonic # in khoảng cách realtime của 2 cảm biến, đánh giá độ nhiễu
-python test_hardware.py barrier    # mở/đóng từng rào
-python test_hardware.py servo      # chỉ test 2 servo SG90: quét 0→90→0°, rồi mở/đóng 2 lần
-python test_hardware.py near       # ĐẾN GẦN THÌ MỞ RÀO: đưa tay vào cảm biến → rào mở; bỏ ra 2s → đóng
-python test_hardware.py oled       # màn hình TFT: dải màu, màn chờ, mũi tên trái/phải/thẳng, "BÃI ĐẦY", tiếng Việt
-python test_hardware.py birthday   # màn hình động "Happy Birthday Thúy Hèng": bánh kem + nến + bóng bay + confetti (30s)
-python test_hardware.py camera     # 15s đo fps + khoảng đứng hình; lưu camera_test.jpg; PASS nếu fps ≥ 80% mục tiêu
-python test_hardware.py all        # tất cả + bảng PASS/FAIL cuối cùng
-```
-
-Gợi ý chẩn đoán:
-- **Siêu âm không đọc được**: kiểm tra cầu chia áp ở ECHO, VCC 5V, tráo TRIG/ECHO.
-- **Servo không quay / sai góc**: kiểm tra nguồn 5V riêng + GND chung; chỉnh `barrier.open_angle` / `closed_angle`.
-- **TFT trắng xoá**: chưa nhận lệnh, kiểm tra `ls /dev/spidev0.0`, dây SCK/SDI/CS/DC/RESET; thử `tft.speed_mhz: 16`.
-- **TFT tối đen**: chân LED (đèn nền) chưa nối 3.3V.
-- **TFT sai màu** (đỏ ↔ xanh dương): đặt `tft.bgr: true`. **Ngược chiều / lật hình**: đổi `tft.rotate` (0–3).
-- Dùng lại OLED cũ: `display: oled` trong `config.yaml`, bật I2C (`sudo raspi-config nonint do_i2c 0`), `i2cdetect -y 1` thấy 3c.
-- **Camera FAIL**: `libcamera-hello` thử trước; giảm `camera.fps`/độ phân giải; kiểm tra cáp CSI cắm đúng chiều.
-  Xem stream từ máy tính: `http://<ip-pi>:8081/stream.mjpg`.
-
-### Demo luồng xe (không cần server / model)
-
-```bash
-python demo_flow.py              # siêu âm < 10cm → mở rào; đo > 10cm liên tục 2s → đóng; LED sáng hết; màn hình "Xin chào"
-python demo_flow.py --cm 15 --clear 3
-```
-
-## 4. Chạy chương trình chính
+## 3. Chạy
 
 ```bash
 python main.py
 ```
 
-Luồng hoạt động mỗi cổng: `IDLE → (siêu âm thấy xe) → hỏi server → mở rào → (xe đi khuất ≥ 2s) → đóng rào → IDLE`.
-- Cổng **vào**: server trả ô gần nhất → TFT hiện số ô + hướng rẽ → rào mở. Bãi đầy → TFT "BAI DA DAY", rào **không** mở.
-- Rào **không bao giờ đóng khi cảm biến còn thấy xe**; nếu có xe chen vào lúc đang đóng, rào mở lại.
-- **Mất kết nối server** → chế độ offline (`offline.policy`): vẫn mở rào theo cảm biến, đèn giữ trạng thái cuối, tự đồng bộ khi có lại mạng.
+Lúc khởi động: màn TFT hiện "Đang khởi động", đèn chạy một vòng theo thứ tự ô (thấy ngay đèn nào cắm sai),
+log in địa chỉ stream camera. Linh kiện nào lỗi thì in `[!] ...` kèm lý do. Màn hình và camera lỗi vẫn chạy tiếp được,
+cảm biến, rào và đèn là bắt buộc.
+
+### Test từng linh kiện (không cần server)
+
+```bash
+python test_hardware.py            # menu: 1=sensor 2=servo 3=led 4=tft 5=camera
+python test_hardware.py sensor     # hoặc servo | led | tft | camera | all
+```
+Dừng `main.py` / service `parking` trước để không tranh GPIO.
+
+### Luồng một cổng (`core/gate.py`)
+
+```
+IDLE ──siêu âm thấy xe──► hỏi server ──cho phép──► OPEN ──xe đi khuất ≥ clear_delay_s──► CLOSING ──rào đóng xong──► IDLE
+                                     └─từ chối───► DENIED ──xe lùi đi──────────────────────────────────────────────► IDLE
+```
+- **Cổng vào**: server đọc biển, chọn ô gần nhất → TFT hiện ô + đường đi trên sơ đồ + biển số → mở rào.
+  Bãi đầy / không đọc được biển / xe đã ở trong bãi → TFT báo lý do, rào **không** mở.
+- **Cổng ra**: server đọc biển, khớp lượt vào, tính phí → mở rào (TFT không hiện gì thêm). Không khớp → TFT báo lý do, giữ rào.
+- Rào **không bao giờ đóng khi cảm biến còn thấy xe**; xe chen vào lúc rào đang đóng → mở lại, tính là lượt mới.
+- Xe nối đuôi khi rào còn mở (cảm biến trống ≥ `new_car_gap_s` rồi lại có xe) → hỏi server lượt mới.
+- Quản lý mở/đóng rào hoặc nhập biển tay trên dashboard → server gửi lệnh `open_barrier` / `close_barrier` / `gate_result`.
+- **Mất server** → `offline.policy`: `open` vẫn mở rào theo cảm biến, `deny` giữ rào đóng. Màn hình vẫn vẽ sơ đồ lần trước
+  (`.lot_cache.json`), tự đồng bộ khi có lại mạng.
 - Đèn: sáng = ô trống, tắt = có xe, nhấp nháy = đang giữ chỗ cho xe vừa vào.
+
+### Xử lý sự cố
+
+- **Siêu âm không đọc được**: kiểm tra cầu chia áp ở ECHO, VCC 5V, tráo TRIG/ECHO. Xem khoảng cách trên trang *Thiết bị & AI*.
+- **Servo không quay / sai góc**: nguồn 5V riêng + GND chung; chỉnh `barrier.*_open_angle` / `*_closed_angle`.
+  Servo rung: `sudo pigpiod` và chạy với `GPIOZERO_PIN_FACTORY=pigpio`.
+- **LED báo "GPIO đang bị ... chiếm"**: chưa tắt I2C / serial / chưa đặt `spi0-1cs` (mục 2).
+- **TFT trắng xoá**: kiểm tra `ls /dev/spidev0.0`, dây SCK/SDI/CS/DC/RESET; thử `tft.speed_mhz: 16`.
+  **Tối đen**: chân LED (đèn nền) chưa nối 3.3V. **Sai màu** (đỏ ↔ xanh dương): `tft.bgr: true`. **Ngược chiều**: đổi `tft.rotate` (0–3).
+- **Camera không chạy**: `rpicam-hello -t 5000` (bản cũ: `libcamera-hello`), kiểm tra cáp CSI; giảm `camera.fps` / độ phân giải.
+  Xem stream từ máy tính: `http://<ip-pi>:8081/stream.mjpg`.
+- **Không kết nối được server**: xem mục xử lý sự cố ở README chính (`server.url`, `key`, `fingerprint`, tường lửa cổng 8443).
 
 ### Tự chạy khi bật nguồn (systemd)
 
@@ -107,3 +125,7 @@ Restart=always
 WantedBy=multi-user.target
 ```
 `sudo systemctl enable --now parking`
+
+Cập nhật code từ bản cũ: chép đè cả thư mục rồi **xóa** các file cũ ở thư mục gốc (`link.py`, `secure_channel.py`,
+`demo_flow.py`, `oled_probe.py`, `update_config.py`) và `hardware/oled.py`, `hardware/servo.py`,
+`hardware/cam_mount.py`, `hardware/birthday.py`.

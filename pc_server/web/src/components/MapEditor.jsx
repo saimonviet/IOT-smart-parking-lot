@@ -253,7 +253,7 @@ export default function MapEditor({ draft, edit }) {
         {slot && (
           <>
             <h3>Ô {slot.label}</h3>
-            <label>Tên ô (hiện trên OLED)
+            <label>Tên ô (hiện trên màn hình cổng)
               <input value={slot.label} maxLength={6} onChange={(e) => setSlot((s) => { s.label = e.target.value.toUpperCase() })} />
             </label>
             <label>Nút đường đi dẫn tới ô
@@ -311,7 +311,7 @@ export default function MapEditor({ draft, edit }) {
             </div>
             <div className="muted small">
               {draft.slots.length} ô · {Object.keys(nodes).length} nút · {draft.edges.length} làn.
-              Xe đi từ nút <b>VÀO</b> theo làn tới nút gắn với ô; hướng rẽ trên OLED tính từ hình dạng làn.
+              Xe đi từ nút <b>VÀO</b> theo làn tới nút gắn với ô; hướng rẽ trên màn hình cổng tính từ hình dạng làn.
             </div>
             <div className="muted small">Mẹo: đặt mỗi ô một nút trên làn, ngay trước miệng ô, để chỉ dẫn rẽ chính xác.</div>
           </>

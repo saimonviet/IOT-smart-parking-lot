@@ -119,7 +119,7 @@ def main():
 
     # 6. server giả: Pi không chịu xác thực với server không có khóa
     from websockets.sync.server import serve
-    from link import PiLink
+    from core.link import PiLink
 
     def fake_server(conn):
         conn.send(json.dumps(sc.challenge(sc.new_nonce())))

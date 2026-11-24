@@ -67,13 +67,13 @@ Chống nhấp nháy: ô chỉ đổi trạng thái sau `CONFIRM_FRAMES` (3) khu
     (ảnh tĩnh cho `roi_calibrate.py` / `collect_crops.py`: `http://<ip-điện-thoại>:8080/shot.jpg`).
   - Android/iPhone, app **DroidCam** hoặc **Iriun Webcam** (cài thêm phần mềm trên PC) → điện thoại thành webcam của máy tính:
     `$env:VIDEO_SOURCE="0"` (thử `"1"` nếu laptop có webcam sẵn).
-  - Khi đặt `VIDEO_SOURCE` cụ thể, server không lấy camera từ Pi nữa; Pi vẫn lo cảm biến, rào, đèn, OLED như bình thường.
+  - Khi đặt `VIDEO_SOURCE` cụ thể, server không lấy camera từ Pi nữa; Pi vẫn lo cảm biến, rào, đèn, màn hình TFT như bình thường.
 
 ## Chỉnh sơ đồ bãi và vùng ROI trên web (khuyến nghị)
 
 Đăng nhập tài khoản quản lý → menu **Sơ đồ bãi**:
 1. **Mẫu có sẵn**: một dãy, hai dãy đối diện, nhiều làn dọc, đỗ xéo — chỉnh số ô rồi bấm *Dùng mẫu này*.
-2. **Sơ đồ**: kéo thả ô và nút đường đi, nối/bỏ làn, chọn nút cổng vào/ra, đổi tên ô (không dấu, ≤ 6 ký tự cho OLED).
+2. **Sơ đồ**: kéo thả ô và nút đường đi, nối/bỏ làn, chọn nút cổng vào/ra, đổi tên ô (không dấu, ≤ 6 ký tự, hiện trên màn hình cổng vào).
 3. **Vùng camera**: bấm 4 góc từng ô trên ảnh camera thật (ô chưa vẽ có viền cam đứt nét).
 4. **Lưu & áp dụng**: server kiểm tra (tên trùng, ô không có đường từ cổng vào…), ghi `config/layout.json`
    (bản trước giữ ở `config/layout.prev.json`) và nạp lại bộ nhận diện ngay, không cần khởi động lại.
@@ -90,6 +90,25 @@ python tools/roi_calibrate.py http://<ip-pi>:8081/snapshot.jpg
 ```
 Bấm 4 góc cho mỗi ô theo thứ tự A1, A2, A3, B1 … C4. Kết quả ghi vào `config/layout.json` (cùng file định nghĩa đường đi để tìm ô gần nhất —
 chỉnh `nodes`/`lane`/`slots[].node` nếu bố cục bãi khác).
+
+## Tài khoản và phân quyền
+
+Website là hệ thống **nội bộ** cho người vận hành bãi, nên **không có đăng ký công khai**. Quản lý cấp tài khoản cho nhân viên ở menu **Tài khoản**.
+
+| Vai trò | Được làm |
+|---|---|
+| **Quản lý** (`admin`) | Mọi thứ: mở/đóng rào, nhập xe tay, sửa biển số, chỉnh sơ đồ bãi, đổi mô hình, quản lý tài khoản |
+| **Nhân viên** (`viewer`) | Chỉ xem: tổng quan, camera, xe ra vào, lịch sử, thống kê |
+
+- **Đổi mật khẩu** (mọi người, menu *Tài khoản* hoặc bấm vào tên ở góc trái): cần mật khẩu hiện tại, mật khẩu mới ≥ 8 ký tự.
+  Đổi xong, mọi phiên đăng nhập khác của tài khoản đó bị đăng xuất (cột `token_ver` trong JWT).
+- **Quản lý tài khoản** (chỉ quản lý): tạo tài khoản, đổi vai trò, khóa/mở khóa, đặt lại mật khẩu, xóa. Không thể tự khóa,
+  tự hạ quyền hoặc tự xóa mình, và luôn phải còn ít nhất 1 quản lý đang hoạt động. Khóa hoặc đổi quyền có hiệu lực ngay với phiên đang mở.
+- Tài khoản mới, tài khoản vừa được đặt lại mật khẩu, và `admin` còn dùng mật khẩu mặc định đều bị nhắc đổi mật khẩu bằng banner trên giao diện.
+- Đăng nhập sai 5 lần trong 5 phút thì IP bị chặn 5 phút, sự kiện được ghi vào nhật ký (`security`). Mọi thao tác tài khoản được ghi nhật ký `account`.
+- Quên mật khẩu quản lý duy nhất: dừng server, đặt `ADMIN_PASSWORD` rồi xóa/khóa hết quản lý trong `data/parking.db`
+  (vd. `UPDATE users SET active=0 WHERE role='admin'`). Khi khởi động, server khôi phục tài khoản `ADMIN_USER` với mật khẩu đó.
+- `simulator/mock_pi.py` đăng nhập để tự chụp ảnh nền: sau khi đổi mật khẩu admin, chạy `python simulator/mock_pi.py --auto --password <mật-khẩu-mới>`.
 
 ## Nghiệp vụ
 
@@ -109,7 +128,7 @@ chỉnh `nodes`/`lane`/`slots[].node` nếu bố cục bãi khác).
 | Bắt buộc TLS | Kết nối `ws://` (không mã hóa) chỉ được chấp nhận từ chính máy server (`PI_REQUIRE_TLS=1`) | Pi cấu hình nhầm sang kênh không mã hóa |
 
 Mọi lần xác thực sai / gói tin bị từ chối đều ghi vào nhật ký sự kiện (`security`) trên dashboard.
-Giao thức chi tiết: `app/secure_channel.py` (bản giống hệt ở `raspberry_pi/secure_channel.py`).
+Giao thức chi tiết: `app/secure_channel.py` (bản giống hệt ở `raspberry_pi/core/secure_channel.py`).
 
 - Lấy cấu hình cho Pi: `python tools/pi_secret.py`. Đổi khóa: xóa `data/pi.key`, chạy lại server rồi script này.
   Đổi chứng chỉ: xóa thư mục `data/tls/`.
@@ -121,7 +140,7 @@ Giao thức chi tiết: `app/secure_channel.py` (bản giống hệt ở `raspbe
 | Hướng | Thông điệp |
 |---|---|
 | Pi → Server | `{"type":"hello","device","barrier","stream_port"}` · `{"type":"arrive","gate":"in"\|"out","timeout"}` (timeout = số giây Pi chờ; server đọc biển số trong thời gian đó) · `{"type":"telemetry","data":{...}}` · `{"type":"log","level","message"}` |
-| Server → Pi | `{"type":"state","slots":["free"\|"occupied"\|"reserved"×10, thứ tự A1…C4],"free","total"}` · `{"type":"entry_result","allowed","reason","slot","plate","display","oled":{"title","lines","arrow"}}` · `{"type":"exit_result","allowed","reason","plate","fee","oled"}` · `{"type":"command","cmd":"open_barrier"\|"close_barrier"\|"led_test"\|"gate_result","gate","result"}` (gate_result = quản lý nhập biển tay trên dashboard) |
+| Server → Pi | `{"type":"state","slots":["free"\|"occupied"\|"reserved"×10, thứ tự A1…C4],"free","total"}` · `{"type":"entry_result","allowed","reason","slot","plate","display","screen":{"title","lines","arrow"}}` · `{"type":"exit_result","allowed","reason","plate","fee","screen"}` · `{"type":"command","cmd":"open_barrier"\|"close_barrier"\|"gate_result","gate","result"}` (gate_result = quản lý nhập biển tay trên dashboard) |
 
 ## Biến môi trường chính
 

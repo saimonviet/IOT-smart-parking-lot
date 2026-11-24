@@ -21,8 +21,8 @@ import cv2
 import numpy as np
 PC_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PC_DIR))
-sys.path.insert(0, str(PC_DIR.parent / "raspberry_pi"))  # dùng chung link.py + secure_channel.py của Pi thật
-from link import PiLink  # noqa: E402
+sys.path.insert(0, str(PC_DIR.parent / "raspberry_pi"))  # dùng chung core/link.py + core/secure_channel.py của Pi thật
+from core.link import PiLink  # noqa: E402
 
 LAYOUT = json.loads((PC_DIR / "config" / "layout.json").read_text())
 W, H = LAYOUT["frame"]["width"], LAYOUT["frame"]["height"]
@@ -125,12 +125,12 @@ def on_entry(msg):
     if msg is None:
         print("  [CỔNG VÀO] server không trả lời")
     elif msg["allowed"]:
-        o = msg["oled"]
-        print(f"  [OLED] {o['title']} | {' / '.join(o['lines'])} | mũi tên đầu: {o['arrow']}")
+        o = msg["screen"]
+        print(f"  [TFT] {o['title']} | {' / '.join(o['lines'])} | mũi tên đầu: {o['arrow']}")
         print("  [RÀO VÀO] mở")
         drive_to_slot(msg["slot"])
     else:
-        print(f"  [OLED] {msg['oled']['title']} — rào KHÔNG mở")
+        print(f"  [TFT] {msg['screen']['title']} — rào KHÔNG mở")
 
 
 def on_command(msg):

@@ -1,15 +1,20 @@
 import { useState } from 'react'
 import { useOutletContext } from 'react-router-dom'
-import { Camera, Cpu, Lightbulb, Lock, LockOpen, ScanSearch } from 'lucide-react'
+import { BrainCircuit, Camera, Cpu, DoorOpen, HardDrive, Lock, LockOpen } from 'lucide-react'
 import { api } from '../api'
 import { useAuth } from '../App.jsx'
 import ModelPicker from '../components/ModelPicker.jsx'
 import PlateCamCard from '../components/PlateCamCard.jsx'
+import PlateAiCard from '../components/PlateAiCard.jsx'
 
 const BARRIER = { closed: 'Đóng', open: 'Mở', opening: 'Đang mở', closing: 'Đang đóng', partial: 'Giữa chừng' }
 
 function Row({ k, v }) {
   return <div className="row"><span className="muted">{k}</span><b>{v ?? '—'}</b></div>
+}
+
+function Online({ ok, on = 'Online', off = 'Offline' }) {
+  return <span className={`pill ${ok ? 'pill-ok' : 'pill-bad'}`}><i className="dot" />{ok ? on : off}</span>
 }
 
 export default function Devices() {
@@ -35,71 +40,58 @@ export default function Devices() {
     <>
       <div className="page-head">
         <div>
-          <h2>Thiết bị</h2>
-          <p className="muted">Tình trạng Raspberry Pi, camera, bộ nhận diện và điều khiển thủ công.</p>
+          <h2>Thiết bị & AI</h2>
+          <p className="muted">Tình trạng phần cứng, điều khiển rào chắn và hai mô hình AI của hệ thống.</p>
         </div>
       </div>
       {msg && <div className={msg.ok ? 'notice notice-ok' : 'notice'}>{msg.text}</div>}
 
-      <div className="grid-devices">
+      {/* ------------------------------------------------ PHẦN CỨNG */}
+      <h3 className="section-title"><HardDrive size={18} /> Thiết bị phần cứng</h3>
+      <div className="grid-hw">
         <section className="card">
-          <div className="card-head"><h3><Cpu size={18} /> Raspberry Pi</h3>
-            <span className={`pill ${pi.online ? 'pill-ok' : 'pill-bad'}`}><i className="dot" />{pi.online ? 'Online' : 'Offline'}</span></div>
+          <div className="card-head"><h3><Cpu size={18} /> Raspberry Pi</h3><Online ok={pi.online} /></div>
           <Row k="Địa chỉ IP" v={pi.ip} />
           <Row k="Thiết bị" v={pi.info?.device} />
-          <Row k="Loại rào chắn" v={pi.info?.barrier === 'servo' ? 'Servo' : pi.info?.barrier === 'stepper' ? 'Động cơ bước' : null} />
-          <Row k="Khoảng cách cổng vào" v={t.dist_in_cm != null ? `${t.dist_in_cm} cm` : null} />
-          <Row k="Khoảng cách cổng ra" v={t.dist_out_cm != null ? `${t.dist_out_cm} cm` : null} />
-          <Row k="Rào vào" v={BARRIER[t.barrier_in] ?? t.barrier_in} />
-          <Row k="Rào ra" v={BARRIER[t.barrier_out] ?? t.barrier_out} />
+          <Row k="Cảm biến cổng vào" v={t.dist_in_cm != null ? `${t.dist_in_cm} cm` : null} />
+          <Row k="Cảm biến cổng ra" v={t.dist_out_cm != null ? `${t.dist_out_cm} cm` : null} />
           <Row k="Nhiệt độ CPU" v={t.cpu_temp != null ? `${t.cpu_temp}°C` : null} />
         </section>
 
         <section className="card">
-          <div className="card-head"><h3><Camera size={18} /> Camera</h3>
-            <span className={`pill ${camera.online ? 'pill-ok' : 'pill-bad'}`}><i className="dot" />{camera.online ? 'Có tín hiệu' : 'Mất tín hiệu'}</span></div>
-          <Row k="Tốc độ khung hình" v={camera.online ? `${camera.fps} fps` : null} />
+          <div className="card-head"><h3><Camera size={18} /> Camera bãi đỗ</h3><Online ok={camera.online} on="Có tín hiệu" off="Mất tín hiệu" /></div>
           <Row k="Nguồn" v={camera.source} />
+          <Row k="Tốc độ khung hình" v={camera.online ? `${camera.fps} fps` : null} />
+          <p className="muted small">Ảnh từ camera này được đưa vào AI nhận diện ô trống.</p>
           {camera.error && <div className="notice">{camera.error}</div>}
         </section>
 
         <section className="card">
-          <div className="card-head"><h3><ScanSearch size={18} /> Nhận diện AI</h3></div>
-          <Row k="Bộ nhận diện" v={{ classifier: 'Mô hình phân loại ô (tự huấn luyện)', yolo: 'YOLOv8 (COCO)', background: 'So sánh ảnh nền' }[detector.name] ?? 'Tắt'} />
-          {detector.model && <Row k="Mô hình" v={detector.model} />}
-          {detector.threshold != null && <Row k="Ngưỡng có xe" v={detector.threshold.toFixed(2)} />}
-          <Row k="Tốc độ xử lý" v={`${detector.fps} fps`} />
-          <Row k="Số vật thể phát hiện" v={detector.boxes} />
-          <Row k="Ảnh nền bãi trống" v={detector.has_reference ? 'Đã có' : 'Chưa có'} />
-          {detector.error && <div className="notice">{detector.error}</div>}
-          <button className="btn" disabled={!isAdmin || !camera.online} onClick={() => run('Chụp ảnh nền', '/detector/reference')}>
-            Chụp ảnh nền (khi bãi đang trống)
-          </button>
-        </section>
-
-        <ModelPicker detector={detector} isAdmin={isAdmin} />
-
-        <PlateCamCard status={plate} isAdmin={isAdmin} />
-
-        <section className="card">
-          <div className="card-head"><h3>Điều khiển thủ công</h3></div>
-          {!isAdmin && <div className="muted small">Cần tài khoản quản lý.</div>}
+          <div className="card-head"><h3><DoorOpen size={18} /> Rào chắn</h3>
+            <span className="muted small">{pi.info?.barrier === 'servo' ? 'Servo' : pi.info?.barrier === 'stepper' ? 'Động cơ bước' : ''}</span></div>
           <div className="ctl">
-            {[['in', 'vào'], ['out', 'ra']].map(([g, name]) => (
+            {[['in', 'vào', t.barrier_in], ['out', 'ra', t.barrier_out]].map(([g, name, st]) => (
               <div key={g} className="ctl-row">
-                <span>Rào {name}</span>
+                <span>Rào {name}: <b>{BARRIER[st] ?? st ?? '—'}</b></span>
                 <div className="btn-row">
                   <button className="btn" disabled={!isAdmin || !pi.online} onClick={() => run(`Mở rào ${name}`, '/devices/barrier', { gate: g, action: 'open' })}><LockOpen size={15} /> Mở</button>
                   <button className="btn" disabled={!isAdmin || !pi.online} onClick={() => run(`Đóng rào ${name}`, '/devices/barrier', { gate: g, action: 'close' })}><Lock size={15} /> Đóng</button>
                 </div>
               </div>
             ))}
-            <div className="ctl-row">
-              <span>12 đèn LED</span>
-              <button className="btn" disabled={!isAdmin || !pi.online} onClick={() => run('Chạy thử đèn', '/devices/led-test')}><Lightbulb size={15} /> Chạy đèn 1→12</button>
-            </div>
           </div>
+          <p className="muted small">{isAdmin ? 'Dùng khi cần mở/đóng tay, ví dụ xe ưu tiên hoặc sự cố.' : 'Cần tài khoản quản lý.'}</p>
         </section>
+
+        <PlateCamCard status={plate} isAdmin={isAdmin} />
+      </div>
+
+      {/* ------------------------------------------------ AI */}
+      <h3 className="section-title"><BrainCircuit size={18} /> Nhận diện AI</h3>
+      <div className="grid-ai">
+        <ModelPicker detector={detector} cameraOnline={camera.online} isAdmin={isAdmin}
+          onReference={() => run('Chụp ảnh nền', '/detector/reference')} />
+        <PlateAiCard status={plate} isAdmin={isAdmin} />
       </div>
     </>
   )

@@ -73,7 +73,11 @@ CREATE INDEX IF NOT EXISTS idx_reads_ts ON plate_reads(ts);
 
 # cột thêm vào bảng có sẵn (DB cũ): (bảng, cột, kiểu)
 MIGRATIONS = [("sessions", "plate", "TEXT"), ("sessions", "visit_id", "INTEGER"),
-              ("plate_reads", "read_ms", "INTEGER"), ("plate_reads", "total_ms", "INTEGER")]
+              ("plate_reads", "read_ms", "INTEGER"), ("plate_reads", "total_ms", "INTEGER"),
+              # tài khoản: khóa/mở, thu hồi token khi đổi mật khẩu, bắt đổi mật khẩu mặc định
+              ("users", "active", "INTEGER NOT NULL DEFAULT 1"),
+              ("users", "token_ver", "INTEGER NOT NULL DEFAULT 0"),
+              ("users", "must_change", "INTEGER NOT NULL DEFAULT 0")]
 
 
 def now_iso():

@@ -146,7 +146,7 @@ class LotState:
 
     @staticmethod
     def _deny(reason, title, *lines):
-        return {"allowed": False, "reason": reason, "oled": {"title": title, "lines": list(lines), "arrow": "none"}}
+        return {"allowed": False, "reason": reason, "screen": {"title": title, "lines": list(lines), "arrow": "none"}}
 
     def _record_read(self, gate, read, result, visit_id=None):
         """Lưu mọi lần đọc biển (kể cả bị từ chối) để tra soát, đẩy lên dashboard theo thời gian thực."""
@@ -213,7 +213,7 @@ class LotState:
             self._record_read("in", read, "allowed", visit_id)
             self._emit("state")
             return {"allowed": True, "slot": sid, "label": route["label"], "route": route["path"],
-                    "steps": route["steps"], "points": route["points"], "oled": route["oled"],
+                    "steps": route["steps"], "points": route["points"], "screen": route["screen"],
                     "plate": plate, "display": pretty(plate) if plate else None, "visit_id": visit_id}
 
     def handle_exit(self, read=None, mode="auto"):
@@ -221,7 +221,7 @@ class LotState:
         bye = {"title": "Hen gap lai!", "lines": [], "arrow": "none"}
         if read is None:
             self.log("info", "gate_out", "Xe qua cổng ra")
-            return {"allowed": True, "oled": bye}
+            return {"allowed": True, "screen": bye}
         with self.lock:
             plate = read.get("plate")
             if not plate:
@@ -231,7 +231,7 @@ class LotState:
                     return self._deny("unread", "KHONG DOC DUOC", "bien so xe.", "Lui lai, thu lai")
                 self.log("warn", "plate_unread", "Cổng ra: không đọc được biển số, vẫn cho ra (PLATE_REQUIRED=0)")
                 self._record_read("out", read, "allowed")
-                return {"allowed": True, "oled": bye}
+                return {"allowed": True, "screen": bye}
             visit = self.inside_visit(plate)
             if not visit:
                 if config.PLATE_REQUIRED:
@@ -240,14 +240,14 @@ class LotState:
                     return self._deny("nomatch", "KHONG KHOP", pretty(plate), "Lien he bao ve")
                 self.log("warn", "plate_nomatch", f"Cổng ra: xe {pretty(plate)} không có lượt vào, vẫn cho ra")
                 self._record_read("out", read, "allowed")
-                return {"allowed": True, "oled": {**bye, "lines": [pretty(plate)]}}
+                return {"allowed": True, "screen": {**bye, "lines": [pretty(plate)]}}
             fee, dur = self.close_visit(visit, read, mode)
             self._record_read("out", read, "allowed", visit["id"])
             fix = f" (lúc vào đọc {pretty(visit['plate'])})" if visit["plate"] != plate else ""
             how = " (quản lý xác nhận)" if mode == "manual" else ""
             self.log("info", "gate_out", f"Xe {pretty(plate)} ra cổng{how}{fix}, gửi {dur // 60} phút, phí {fee:,}đ")
             return {"allowed": True, "plate": visit["plate"], "fee": fee, "duration_s": dur,
-                    "oled": {**bye, "lines": [pretty(visit["plate"]), f"Phi {fee:,}d".replace(",", ".")]}}
+                    "screen": {**bye, "lines": [pretty(visit["plate"]), f"Phi {fee:,}d".replace(",", ".")]}}
 
     def close_visit(self, visit, read=None, mode="auto"):
         entry = datetime.fromisoformat(visit["entry_at"])

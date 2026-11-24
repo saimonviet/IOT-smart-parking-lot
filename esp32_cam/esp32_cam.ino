@@ -10,7 +10,8 @@
  *       -> LƯU vào bộ nhớ ESP32 (khởi động lại vẫn giữ). reset=1 về mặc định. Đổi size thì ESP32 tự khởi động lại.
  *   GET http://<ip>/aim?key=CAM_KEY&gate=in|out    -> ĐỘNG CƠ BƯỚC xoay camera về cổng (chờ quay xong mới trả lời)
  *       &steps=±N (nhích tay) | &set=in|out (lưu vị trí hiện tại làm vị trí cổng) | &zero=1 (đặt vị trí hiện tại = 0)
- *   GET http://<ip>:81/stream?key=CAM_KEY          -> luồng MJPEG để xem/căn camera
+ *   GET http://<ip>:81/stream?key=CAM_KEY          -> luồng MJPEG để xem/căn camera — CHỈ khi STREAM_ENABLED = true
+ *       (mặc định tắt: cổng 81 không mở, camera chỉ chụp khi được gọi /capture)
  *
  * Động cơ bước 28BYJ-48 + mạch ULN2003 (xoay camera giữa cổng vào và cổng ra):
  *   IN1 -> GPIO14, IN2 -> GPIO15, IN3 -> GPIO13, IN4 -> GPIO12 (các chân của khe thẻ SD — KHÔNG cắm thẻ nhớ)
@@ -47,6 +48,10 @@ const bool FLIP_VERTICAL = false;
 const bool MIRROR_HORIZONTAL = true;                // ảnh bị ngược như soi gương -> lật trái-phải
 const bool FLASH_ON_CAPTURE = false;                // luôn bật đèn flash khi chụp (server cũng tự bật được qua /control)
 const int FLASH_LEVEL = 60;                         // 0..255 (đèn rất sáng, để thấp tránh lóa biển)
+// Luồng MJPEG cổng 81: false = KHÔNG mở stream khi khởi động (chỉ chụp ảnh khi được gọi /capture).
+// Server không cần stream. Chỉ bật true khi muốn xem trực tiếp để căn góc (plate_cam_test.py --stream).
+const bool STREAM_ENABLED = false;
+
 // Động cơ bước xoay camera (false = camera đứng yên, /aim chỉ trả lời "ok")
 const bool STEPPER_ENABLED = true;
 const int STEPPER_PINS[4] = {14, 15, 13, 12};      // IN1..IN4 của ULN2003
@@ -356,6 +361,7 @@ void start_servers() {
     httpd_register_uri_handler(web_httpd, &st);
     httpd_register_uri_handler(web_httpd, &ctl);
   }
+  if (!STREAM_ENABLED) return;   // không mở cổng 81
   hc.server_port = 81;
   hc.ctrl_port = 32769;
   httpd_uri_t stream = {"/stream", HTTP_GET, stream_handler, NULL};
@@ -422,7 +428,9 @@ void setup() {
     if (i > 60) ESP.restart();
   }
   String ip = WiFi.localIP().toString();
-  Serial.printf("\nIP: http://%s   (stream: http://%s:81/stream)\n", ip.c_str(), ip.c_str());
+  Serial.printf("\nIP: http://%s\n", ip.c_str());
+  if (STREAM_ENABLED) Serial.printf("Stream: http://%s:81/stream?key=<CAM_KEY>\n", ip.c_str());
+  else Serial.println("Stream: TAT (STREAM_ENABLED = false) - chi chup khi duoc goi /capture");
   Serial.printf("Trang cai dat: http://%s/?key=<CAM_KEY>\n", ip.c_str());
   start_servers();
 }

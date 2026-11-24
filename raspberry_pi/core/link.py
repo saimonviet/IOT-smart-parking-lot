@@ -14,7 +14,7 @@ import time
 
 import websocket  # websocket-client
 
-import secure_channel as sc
+from . import secure_channel as sc
 
 
 def _norm_fp(fp):

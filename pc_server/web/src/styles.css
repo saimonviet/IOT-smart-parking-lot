@@ -362,3 +362,53 @@ td.actions .icon-btn { display: inline-grid; }
 .flash-row b { min-width: 32px; text-align: right; }
 .check-row { display: flex !important; flex-direction: row !important; align-items: center; gap: 8px; }
 .check-row input { width: auto !important; }
+
+/* ---------- tài khoản ---------- */
+.grid-account { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; align-items: start; }
+.account-single { max-width: 520px; }
+.account-form { display: flex; flex-direction: column; gap: 14px; }
+.account-form .card-head { margin-bottom: 0; }
+.account-form .card-head h3 { display: flex; align-items: center; gap: 8px; }
+.account-form .notice { margin-top: 0; }
+.section-title { font-size: 17px; margin: 6px 0 -8px; }
+.table-scroll { overflow-x: auto; }
+.table-scroll td .badge + .badge { margin-left: 6px; }
+.btn-row.nowrap { flex-wrap: nowrap; justify-content: flex-end; gap: 2px; }
+.user-link { display: flex; align-items: center; gap: 10px; color: inherit; text-decoration: none; border-radius: 10px; }
+.user-link:hover .user-name { color: var(--accent); }
+.must-change { justify-content: space-between; margin-top: 0; }
+.must-change a { color: inherit; font-weight: 600; }
+@media (max-width: 1050px) { .grid-account { grid-template-columns: 1fr; } }
+
+/* ---------- thiết bị & AI ---------- */
+.grid-hw { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; align-items: start; }
+.grid-hw > .card { display: flex; flex-direction: column; gap: 4px; }
+.grid-hw .card-head { margin-bottom: 8px; }
+.grid-hw p.small { margin: 8px 0 0; }
+.grid-ai { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; align-items: start; }
+.ai-card { display: flex; flex-direction: column; gap: 12px; }
+.ai-card .card-head { margin-bottom: 0; align-items: flex-start; }
+.ai-card .notice { margin-top: 0; }
+.ai-card p.small { margin: 0; }
+.ai-flow { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 8px; font-size: 12px; color: var(--muted); }
+.ai-flow span { display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px; border-radius: 99px; background: #0d1527; border: 1px solid var(--card-b); color: var(--text); }
+.ai-status { padding: 4px 14px; border-radius: 12px; background: #0d1527; }
+.ai-pick-head { display: flex; align-items: center; justify-content: space-between; padding-top: 6px; border-top: 1px solid var(--card-b); }
+.btn-sm { padding: 6px 12px; font-size: 13px; border-radius: 9px; }
+.model-groups { display: flex; flex-direction: column; gap: 14px; }
+.model-group { display: flex; flex-direction: column; gap: 8px; }
+.model-group-head { display: flex; align-items: center; gap: 8px; }
+.model-group-head svg { color: var(--accent); }
+.model-group p.small { margin: 0; }
+.radio { flex: none; width: 16px; height: 16px; margin-top: 2px; border-radius: 50%; border: 2px solid #3b4d72; }
+.radio.on { border-color: var(--accent); background: radial-gradient(circle, var(--accent) 0 4px, transparent 5px); }
+.apply-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding-top: 12px; border-top: 1px solid var(--card-b); }
+.stage-list { display: flex; flex-direction: column; gap: 10px; }
+.stage { padding: 12px 14px; border-radius: 12px; border: 1px solid var(--card-b); background: #0d1527; display: flex; flex-direction: column; gap: 8px; }
+.stage-head { display: flex; align-items: center; gap: 8px; }
+.stage-head svg { color: var(--accent); }
+.warn { color: #fbbf24; }
+.test-result { flex-direction: column; align-items: stretch; }
+.test-result img { width: 100%; border-radius: 10px; border: 1px solid var(--card-b); }
+@media (max-width: 1280px) { .grid-hw { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 1050px) { .grid-hw, .grid-ai { grid-template-columns: 1fr; } }

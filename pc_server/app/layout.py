@@ -15,7 +15,7 @@ import unicodedata
 from . import config
 
 NODE_RE = re.compile(r"^[A-Za-z0-9_]{1,12}$")
-LABEL_RE = re.compile(r"^[A-Za-z0-9-]{1,6}$")  # không dấu để hiện được trên OLED
+LABEL_RE = re.compile(r"^[A-Za-z0-9-]{1,6}$")  # ngắn, không dấu: hiện trên màn hình cổng + đèn
 KEYS = ("frame", "map", "entrance", "exit", "nodes", "edges", "slots", "decor")
 
 
@@ -92,7 +92,7 @@ class Layout:
         return sid, self.describe_route(sid, path)
 
     def describe_route(self, sid, path):
-        """Chuyển đường đi thành các bước rẽ + nội dung hiển thị cho OLED."""
+        """Chuyển đường đi thành các bước rẽ + nội dung hiển thị trên màn hình cổng vào."""
         pts = [self.nodes[n] for n in path]
         pts.append(self.slot_center(sid))
         # hướng ban đầu: từ cổng vào đi vào làn
@@ -126,7 +126,7 @@ class Layout:
             "points": [[round(x, 1), round(y, 1)] for x, y in pts],  # tọa độ đường đi trên sơ đồ (vẽ lên TFT)
             "steps": steps,
             "arrow": moves[0][1],
-            "oled": {"title": f"O {label}", "lines": lines, "arrow": moves[0][1]},
+            "screen": {"title": f"O {label}", "lines": lines, "arrow": moves[0][1]},
         }
 
     def screen(self):

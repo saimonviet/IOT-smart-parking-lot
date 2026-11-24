@@ -15,7 +15,7 @@ và có giao diện web cho người quản lý.
 | Thư mục | Nội dung |
 |---|---|
 | [pc_server/](pc_server/README.md) | Server + nhận diện (YOLO / ảnh nền) + tìm ô gần nhất + giao diện React + Pi giả (`simulator/mock_pi.py`) |
-| [raspberry_pi/](raspberry_pi/README.md) | Chương trình chính, sơ đồ đấu nối, **`test_hardware.py`** kiểm tra từng linh kiện |
+| [raspberry_pi/](raspberry_pi/README.md) | Chương trình chính (cổng vào/ra, rào, đèn, màn TFT, camera bãi), sơ đồ đấu nối |
 | [esp32_cam/](esp32_cam/esp32_cam.ino) | Firmware ESP32-CAM chụp biển số cho cả cổng vào và cổng ra |
 | `D:\model_training` | Huấn luyện mô hình ô trống + **nhận diện biển số** (`train_plate.ipynb`, xem README trong đó) |
 | `scripts/demo.ps1` | Chạy thử cả hệ thống trên PC không cần phần cứng |
@@ -110,9 +110,6 @@ sudo reboot
 ls /dev/spidev*                               # phải thấy ĐÚNG MỘT thiết bị: /dev/spidev0.0
 ```
 
-Muốn quay lại màn OLED cũ: đặt `display: oled` trong `raspberry_pi/config.yaml`, cắm OLED vào GPIO 2/3 (chân 3/5) và bật I2C
-(`sudo raspi-config nonint do_i2c 0`).
-
 ### Lưu ý khi cắm
 
 - **Điện trở LED 330–470Ω**, không dùng 220Ω (nhiều LED cùng sáng sẽ vượt giới hạn dòng tổng của GPIO).
@@ -176,14 +173,14 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-**Bước 2. Kiểm tra từng linh kiện** (chưa cần server)
+**Bước 2. Kiểm tra camera Pi** (chưa cần server)
 
 ```bash
-python test_hardware.py all        # hoặc: leds | ultrasonic | barrier | near | oled (màn TFT) | camera
+rpicam-hello -t 5000               # bản OS cũ: libcamera-hello
 ```
 
-Làm tới khi tất cả **PASS**. Bài `near` cho phép thử "đưa tay lại gần cảm biến thì rào mở".
-Bài `camera` đo fps và độ ổn định, lưu ảnh mẫu `camera_test.jpg`. Cách xử lý khi FAIL nằm trong `raspberry_pi/README.md`.
+Các linh kiện còn lại tự báo khi chạy `main.py` ở bước 5: đèn chạy một vòng A1 → C4, màn TFT hiện "Đang khởi động",
+linh kiện nào lỗi thì in `[!] ...` kèm lý do. Cách xử lý nằm trong `raspberry_pi/README.md`.
 
 **Bước 3. Chạy server trên máy tính**
 
@@ -227,7 +224,7 @@ Trên dashboard, thanh trên cùng sẽ báo Raspberry Pi và Camera chuyển sa
 |---|---|
 | Dashboard báo Raspberry Pi offline | Kiểm tra `server.url` (`wss://<ip>:8443`), `key`, `fingerprint` trong `config.yaml` (chạy lại `tools/pi_secret.py`), ping thử, mở tường lửa cổng 8443. Xem nhật ký sự kiện `security` trên dashboard |
 | Pi báo "vân tay chứng chỉ không khớp" | Server đã tạo chứng chỉ mới (hoặc đang bị giả mạo): chạy lại `tools/pi_secret.py`, cập nhật `fingerprint` |
-| Camera mất tín hiệu | Mở `http://<ip-pi>:8081/stream.mjpg` bằng trình duyệt; chạy `python test_hardware.py camera` |
+| Camera mất tín hiệu | Mở `http://<ip-pi>:8081/stream.mjpg` bằng trình duyệt; thử `rpicam-hello` trên Pi, kiểm tra cáp CSI |
 | Ô trống nhưng báo có xe (hoặc ngược lại) | Chụp lại ảnh nền, chỉnh `BG_THRESHOLD`/`BG_RATIO`, hoặc vẽ lại ROI |
 | Không tải được YOLO | `pip install ultralytics`, lần đầu cần Internet để tải `yolov8n.pt` |
 | Rào mở sai góc / ngược chiều | Đổi `barrier.open_angle` / `closed_angle` trong `config.yaml` |
@@ -267,12 +264,14 @@ Mỗi xe ra/vào đều phải được đọc biển số bằng **một ESP32-
 
 **Đèn flash và thời gian xử lý.** Trang Thiết bị → Camera biển số có thanh *Đèn flash khi chụp biển* (0 = tắt): server bật flash ESP32-CAM ngay trước khi chụp và tắt sau khi đọc xong (thêm ~0,25 s). Mỗi lượt xe được ghi thời gian từng bước vào Nhật ký (loại `timing`, ví dụ *Cổng vào: 51G-123.45, cho qua — tổng 640 ms, đọc biển 610 ms = 2 ảnh (chụp 420 ms, nhận diện 150 ms)*), cột thời gian ở trang Xe ra vào, và dòng `[timing in]` trên console của Pi (gồm cả thời gian chờ camera xoay và mạng). Lượt quá 4 s được đánh dấu cảnh báo.
 
+Test camera + động cơ bước từ máy tính: `python tools/plate_cam_test.py --url http://<ip-esp32> --key <CAM_KEY>` (thư mục `pc_server`) — phím `i`/`o` xoay về cổng, `,` `.` nhích ±16 bước, `<` `>` ±128, `1`/`2` lưu vị trí cổng VÀO/RA, `t` chạy thử xoay qua lại 3 lượt, `c` chụp + nhận diện như server. Mặc định camera nghỉ (không stream), chỉ chụp khi bấm `c`; thêm `--stream` để xem luồng liên tục (cần đặt `STREAM_ENABLED = true` trong firmware — mặc định tắt, cổng 81 không mở).
+
 Chạy thử không cần ESP32: `$env:PLATE_CAM_URL="D:\model_training\data\plates\det\images\test"` — mỗi lượt xe dùng ảnh tiếp theo.
 
 ## Thứ tự làm đề xuất
 
 1. **PC trước**: chạy `scripts\demo.ps1`, xem dashboard, thử các trang.
-2. **Pi — kiểm tra linh kiện**: `python test_hardware.py all` đến khi tất cả PASS.
+2. **Pi, kiểm tra camera**: `rpicam-hello`, cắm đủ linh kiện theo bảng chân.
 3. **Camera → AI**: stream camera lên PC, chụp ảnh nền / thử YOLO, chỉnh ROI bằng `tools/roi_calibrate.py`.
 4. **Ghép**: chạy `raspberry_pi/main.py` trỏ về IP máy tính, đi xe mô hình qua cổng.
 

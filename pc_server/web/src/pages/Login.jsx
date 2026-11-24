@@ -30,17 +30,18 @@ export default function Login() {
         <div className="login-art-inner">
           <span className="brand-icon big"><ParkingSquare size={34} /></span>
           <h1>SmartPark</h1>
-          <p>Giám sát bãi đỗ xe theo thời gian thực: nhận diện ô trống bằng AI, chỉ đường cho xe vào và quản lý lịch sử đỗ xe.</p>
+          <p>Hệ thống quản lý bãi đỗ xe dành cho quản lý và nhân viên vận hành.</p>
           <ul>
-            <li>Camera + AI nhận diện 12 ô đỗ</li>
-            <li>Tự chỉ ô trống gần nhất cho xe vào</li>
-            <li>Điều khiển rào chắn, đèn, màn hình OLED</li>
+            <li>Theo dõi tình trạng bãi theo thời gian thực</li>
+            <li>Quản lý xe ra vào theo biển số</li>
+            <li>Tra cứu lịch sử, thống kê lượt xe và doanh thu</li>
+            <li>Phân quyền tài khoản quản lý và nhân viên</li>
           </ul>
         </div>
       </div>
       <form className="login-card" onSubmit={submit}>
-        <h2>Đăng nhập quản lý</h2>
-        <p className="muted">Nhập tài khoản để truy cập hệ thống</p>
+        <h2>Đăng nhập</h2>
+        <p className="muted">Dùng tài khoản do quản lý cấp để truy cập hệ thống</p>
         <label>
           Tên đăng nhập
           <span className="input-wrap"><User size={16} /><input value={username} onChange={(e) => setUsername(e.target.value)} autoFocus required /></span>

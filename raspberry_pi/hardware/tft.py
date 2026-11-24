@@ -1,6 +1,7 @@
-"""Màn hình TFT màu SPI (ILI9341 / ST7735 / ST7789) qua luma.lcd. Cùng giao diện với Oled nên main.py không phải đổi.
+"""Màn hình TFT màu SPI ở cổng vào (ILI9341 / ST7735 / ST7789) qua luma.lcd.
 
-Font DejaVu có đủ dấu tiếng Việt nên chữ hiển thị nguyên dấu (không cần bỏ dấu như OLED).
+Ba màn: idle (màn chờ: số ô trống / sơ đồ bãi), guidance (hướng dẫn xe vào ô), message (thông báo chữ lớn).
+Font DejaVu có đủ dấu tiếng Việt.
 Bố cục vẽ cho màn 320x240, màn nhỏ hơn thì tự co theo tỉ lệ.
 Khi đã nhận sơ đồ bãi từ server (show_map: true), màn chờ vẽ sơ đồ với màu từng ô,
 màn hướng dẫn vẽ đường đi từ cổng vào tới ô được chỉ định.
@@ -10,8 +11,7 @@ import math
 from luma.core.interface.serial import spi
 from luma.core.render import canvas
 from luma.lcd.device import ili9341, st7735, st7789
-
-from .oled import _font, draw_arrow
+from PIL import ImageFont
 
 DRIVERS = {"ili9341": ili9341, "st7735": st7735, "st7789": st7789}
 
@@ -22,6 +22,31 @@ MAP_BG, LANE, PILLAR, ROUTE = (18, 18, 22), (62, 62, 68), (110, 95, 20), (0, 220
 SLOT_FILL = {"free": (0, 135, 60), "occupied": (175, 35, 35), "reserved": (190, 140, 0)}
 SLOT_UNKNOWN = (70, 70, 70)
 TURN_VI = {"left": "rẽ TRÁI", "right": "rẽ PHẢI"}
+
+
+_FONT_PATHS = ["/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",   # apt install fonts-dejavu-core
+               "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"]
+
+
+def _font(size):
+    for p in _FONT_PATHS:
+        try:
+            return ImageFont.truetype(p, size)
+        except OSError:
+            continue
+    return ImageFont.load_default()
+
+
+def draw_arrow(d, kind, cx, cy, s=1.0, fill="white"):
+    """Mũi tên trái / phải / thẳng, tâm (cx, cy), tỉ lệ s (1.0 ≈ 44px)."""
+    shapes = {
+        "left": [(-22, 0), (-2, -18), (-2, -8), (22, -8), (22, 8), (-2, 8), (-2, 18)],
+        "right": [(22, 0), (2, -18), (2, -8), (-22, -8), (-22, 8), (2, 8), (2, 18)],
+        "straight": [(0, -22), (-16, -2), (-6, -2), (-6, 20), (6, 20), (6, -2), (16, -2)],
+    }
+    shape = shapes.get("straight" if kind == "up" else kind)
+    if shape:
+        d.polygon([(cx + x * s, cy + y * s) for x, y in shape], fill=fill)
 
 
 def step_text(st):
@@ -168,8 +193,11 @@ class Tft:
         with canvas(self.device) as d:
             d.rectangle((0, 0, self.w, 40 * k), fill=HEADER)
             self._center(d, 6 * k, "SMART PARKING", self.f_mid, FG)
-            self._center(d, 52 * k, f"{free}/{total}", self.f_huge, OK if free else BAD)
-            self._center(d, 145 * k, "ô trống" if free else "BÃI ĐÃ ĐẦY", self.f_mid, FG)
+            if not total:   # chưa nhận số liệu từ server -> đừng báo "bãi đầy" sai
+                self._center(d, 80 * k, "Đang kết nối...", self.f_mid, DIM)
+            else:
+                self._center(d, 52 * k, f"{free}/{total}", self.f_huge, OK if free else BAD)
+                self._center(d, 145 * k, "ô trống" if free else "BÃI ĐÃ ĐẦY", self.f_mid, FG)
             status, color = ("Sẵn sàng", OK) if online else ("OFFLINE", BAD)
             d.ellipse((10 * k, 208 * k, 24 * k, 222 * k), fill=color)
             d.text((32 * k, 204 * k), status, font=self.f_small, fill=DIM)
@@ -179,9 +207,12 @@ class Tft:
         with canvas(self.device) as d:
             d.rectangle((0, 0, self.w, 30 * k), fill=HEADER)
             d.text((8 * k, 4 * k), "SMART PARKING", font=self.f_small, fill=FG)
-            txt = f"{free}/{total} trống" if free else "BÃI ĐẦY"
+            if not total:   # chưa nhận số liệu từ server (sơ đồ lấy từ cache)
+                txt, col = "Đang kết nối...", DIM
+            else:
+                txt, col = (f"{free}/{total} trống", OK) if free else ("BÃI ĐẦY", BAD)
             d.text((self.w - 8 * k - d.textlength(txt, font=self.f_small), 4 * k), txt,
-                   font=self.f_small, fill=OK if free else BAD)
+                   font=self.f_small, fill=col)
             self._draw_lot(d, lot, statuses, (0, 31 * k, self.w - 1, self.h - 22 * k))
             # chân trang: trạng thái kết nối + chú thích màu
             fy = self.h - 19 * k
@@ -246,12 +277,3 @@ class Tft:
             for i, ln in enumerate(lines):
                 self._center(d, y, str(ln), font, HILITE if big and i == 0 else FG)
                 y += step
-
-    def test_pattern(self):
-        colors = ["red", "lime", "blue", "yellow", "cyan", "magenta", "white"]
-        bw = self.w / len(colors)
-        with canvas(self.device) as d:
-            for i, c in enumerate(colors):
-                d.rectangle((i * bw, 0, (i + 1) * bw, self.h * 0.6), fill=c)
-            d.rectangle((0, 0, self.w - 1, self.h - 1), outline=FG)
-            self._center(d, self.h * 0.7, "TFT OK — Tiếng Việt", self.f_mid, FG)

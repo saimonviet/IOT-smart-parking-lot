@@ -23,7 +23,7 @@ class LedBank:
         self.modes = ["off"] * len(self.leds)   # on | off | blink
         self._lock = threading.Lock()
         self._stop = False
-        self._override = False                  # đang chạy chuỗi test thì tạm dừng cập nhật nền
+        self._override = False                  # đang chạy chase() thì tạm dừng cập nhật nền
         threading.Thread(target=self._blinker, daemon=True).start()
 
     def __len__(self):
@@ -51,30 +51,25 @@ class LedBank:
             phase = not phase
             self._render(phase)
 
-    # --- test ---
-    def all(self, on):
+    def _all(self, on):
         for led in self.leds:
             led.value = 1 if on else 0
 
-    def chase(self, delay=0.25, reverse=False):
-        """Sáng lần lượt đèn 1 → N (mỗi lần một đèn)."""
-        order = range(len(self.leds) - 1, -1, -1) if reverse else range(len(self.leds))
+    def chase(self, delay=0.25):
+        """Sáng lần lượt đèn 1 -> N (lúc khởi động, để thấy ngay đèn nào cắm sai)."""
         self._override = True
         try:
-            self.all(False)
-            for i in order:
-                self.leds[i].on()
+            self._all(False)
+            for led in self.leds:
+                led.on()
                 time.sleep(delay)
-                self.leds[i].off()
+                led.off()
         finally:
             self._override = False
             self._render(True)
 
-    def hold_override(self, flag):
-        self._override = flag
-
     def cleanup(self):
         self._stop = True
-        self.all(False)
+        self._all(False)
         for led in self.leds:
             led.close()

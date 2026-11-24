@@ -9,6 +9,7 @@ import Analytics from './pages/Analytics.jsx'
 import Devices from './pages/Devices.jsx'
 import LayoutSettings from './pages/LayoutSettings.jsx'
 import Vehicles from './pages/Vehicles.jsx'
+import Account from './pages/Account.jsx'
 
 const AuthCtx = createContext(null)
 export const useAuth = () => useContext(AuthCtx)
@@ -38,6 +39,7 @@ export default function App() {
           <Route path="/analytics" element={<Analytics />} />
           <Route path="/devices" element={<Devices />} />
           <Route path="/layout-settings" element={<LayoutSettings />} />
+          <Route path="/account" element={<Account />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

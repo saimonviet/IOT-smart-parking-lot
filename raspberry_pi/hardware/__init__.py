@@ -1,4 +1,7 @@
-"""Khởi tạo linh kiện từ config.yaml. Mỗi linh kiện tạo độc lập để lỗi một chỗ không kéo theo chỗ khác."""
+"""Khởi tạo linh kiện từ config.yaml. Mỗi linh kiện tạo độc lập để lỗi một chỗ không kéo theo chỗ khác.
+
+Import thư viện phần cứng (gpiozero, luma, picamera2) bên trong từng hàm để chỉ nạp khi thật sự dùng.
+"""
 from pathlib import Path
 
 import yaml
@@ -12,21 +15,17 @@ def load_config(path=None):
 
 
 def make_sensor(cfg, gate):
+    """Cảm biến siêu âm HC-SR04 của cổng `in` / `out`."""
     from .ultrasonic import GateSensor
     g = cfg["gates"][gate]
     return GateSensor(g["trig"], g["echo"], g["trigger_cm"], cfg["gates"].get("sample_hz", 10), name=gate)
 
 
 def make_barrier(cfg, gate):
-    from .servo import ServoBarrier
-    return ServoBarrier(cfg["barrier"][f"{gate}_pin"], *barrier_angles(cfg, gate))
-
-
-def barrier_angles(cfg, gate):
-    """(góc đóng, góc mở) của từng cổng: ưu tiên in_/out_closed_angle, không có thì dùng closed_angle/open_angle chung."""
+    """Rào chắn servo SG90 của cổng `in` / `out`, góc đóng/mở riêng từng cổng."""
+    from .barrier import ServoBarrier
     b = cfg["barrier"]
-    return (b.get(f"{gate}_closed_angle", b.get("closed_angle", 0)),
-            b.get(f"{gate}_open_angle", b.get("open_angle", 90)))
+    return ServoBarrier(b[f"{gate}_pin"], b.get(f"{gate}_closed_angle", 0), b.get(f"{gate}_open_angle", 90))
 
 
 def make_leds(cfg):
@@ -34,24 +33,9 @@ def make_leds(cfg):
     return LedBank(cfg["leds"]["pins"], cfg["leds"].get("active_high", True))
 
 
-def make_cam_mount(cfg):
-    """Servo xoay ESP32-CAM giữa 2 cổng; None nếu config không có mục cam_mount (camera đứng yên nhìn cả 2 làn)."""
-    m = cfg.get("cam_mount")
-    if not m or m.get("pin") is None:
-        return None
-    from .cam_mount import CamMount
-    return CamMount(m["pin"], {"in": m.get("in_angle", 0), "out": m.get("out_angle", 180)},
-                    m.get("travel_s", 0.6), m.get("settle_s", 0.4), m.get("priority_window_s", 0.3), m.get("hold", False))
-
-
-def make_display(cfg):
-    """Màn hình theo `display` trong config: tft (mặc định) hoặc oled. Hai lớp có cùng các hàm idle/guidance/message."""
-    if cfg.get("display", "tft") == "tft":
-        from .tft import Tft
-        return Tft(**cfg["tft"])
-    from .oled import Oled
-    o = cfg["oled"]
-    return Oled(o["port"], o["address"], o["width"], o["height"], o.get("rotate", 0), o.get("driver", "ssd1306"))
+def make_tft(cfg):
+    from .tft import Tft
+    return Tft(**cfg["tft"])
 
 
 def make_camera(cfg):

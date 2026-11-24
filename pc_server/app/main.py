@@ -9,7 +9,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 import cv2
-from fastapi import (Body, Depends, FastAPI, HTTPException, Query, WebSocket,
+from fastapi import (Body, Depends, FastAPI, HTTPException, Query, Request, WebSocket,
                      WebSocketDisconnect)
 from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
@@ -21,6 +21,7 @@ from .detector import (KINDS, DetectionEngine, FrameSource, list_models, load_se
                        make_detector, render_frame, save_selection)
 from . import layout as layout_mod
 from .layout import Layout
+from . import plates as plate_mod
 from .plates import PlateReader, clean, is_valid, pretty, save_cam
 from .state import LotState
 
@@ -114,6 +115,7 @@ class Hub:
 
 hub = Hub()
 pi_guard = AuthGuard()
+login_guard = AuthGuard()  # đăng nhập web
 pi_pending = 0  # số kết nối Pi đang bắt tay
 layout = state = source = engine = None
 plates = PlateReader()  # camera biển số ESP32-CAM + mô hình ALPR
@@ -212,17 +214,155 @@ class LoginBody(BaseModel):
     password: str
 
 
+def _ip(request: Request):
+    return request.client.host if request.client else "?"
+
+
 @app.post("/api/auth/login")
-def login(body: LoginBody):
+def login(body: LoginBody, request: Request):
+    ip = _ip(request)
+    if login_guard.is_blocked(ip):
+        raise HTTPException(429, f"Đăng nhập sai quá nhiều lần, thử lại sau {AuthGuard.BLOCK // 60} phút")
     u = db.one("SELECT * FROM users WHERE username=?", (body.username.strip(),))
     if not u or not auth.verify_password(body.password, u["password_hash"]):
+        if login_guard.fail(ip):
+            state.log("warning", "security", f"Đăng nhập web sai {AuthGuard.MAX_FAILS} lần từ {ip} — chặn "
+                                             f"{AuthGuard.BLOCK // 60} phút")
         raise HTTPException(401, "Sai tên đăng nhập hoặc mật khẩu")
-    return {"token": auth.make_token(u), "user": {"username": u["username"], "role": u["role"]}}
+    if not u["active"]:
+        raise HTTPException(403, "Tài khoản đã bị khóa, liên hệ quản lý")
+    login_guard.ok(ip)
+    return {"token": auth.make_token(u), "user": auth.public_user(u)}
 
 
 @app.get("/api/auth/me")
 def me(user=Depends(auth.current_user)):
-    return {"username": user["sub"], "role": user["role"]}
+    return auth.public_user(db.one("SELECT * FROM users WHERE id=?", (user["uid"],)))
+
+
+class ChangePasswordBody(BaseModel):
+    old_password: str
+    new_password: str
+
+
+@app.post("/api/auth/change-password")
+def change_password(body: ChangePasswordBody, request: Request, user=Depends(auth.current_user)):
+    ip = _ip(request)
+    if login_guard.is_blocked(ip):
+        raise HTTPException(429, f"Nhập sai quá nhiều lần, thử lại sau {AuthGuard.BLOCK // 60} phút")
+    u = db.one("SELECT * FROM users WHERE id=?", (user["uid"],))
+    if not auth.verify_password(body.old_password, u["password_hash"]):
+        login_guard.fail(ip)
+        raise HTTPException(400, "Mật khẩu hiện tại không đúng")
+    auth.check_password(body.new_password, u["username"])
+    if body.new_password == body.old_password:
+        raise HTTPException(400, "Mật khẩu mới phải khác mật khẩu hiện tại")
+    db.execute("UPDATE users SET password_hash=?, must_change=0, token_ver=token_ver+1 WHERE id=?",
+               (auth.hash_password(body.new_password), u["id"]))
+    state.log("info", "account", f"Tài khoản {u['username']} đổi mật khẩu (các phiên đăng nhập khác bị đăng xuất)")
+    u = db.one("SELECT * FROM users WHERE id=?", (u["id"],))
+    return {"token": auth.make_token(u), "user": auth.public_user(u)}
+
+
+# ----------------------------------------------------------------- quản lý tài khoản (chỉ quản lý)
+ROLE_TEXT = {"admin": "quản lý", "viewer": "nhân viên"}
+
+
+def _get_user(uid: int):
+    u = db.one("SELECT * FROM users WHERE id=?", (uid,))
+    if not u:
+        raise HTTPException(404, "Không tìm thấy tài khoản")
+    return u
+
+
+def _keep_one_admin(u: dict):
+    """Không cho khóa / hạ quyền / xóa quản lý cuối cùng đang hoạt động."""
+    if u["role"] == "admin" and u["active"] and auth.active_admins() <= 1:
+        raise HTTPException(400, "Phải còn ít nhất một tài khoản quản lý đang hoạt động")
+
+
+@app.get("/api/users")
+def list_users(user=Depends(auth.require_admin)):
+    rows = db.query("SELECT id, username, role, active, must_change, created_at FROM users ORDER BY id")
+    for r in rows:
+        r["active"], r["must_change"] = bool(r["active"]), bool(r["must_change"])
+    return rows
+
+
+class NewUserBody(BaseModel):
+    username: str
+    password: str
+    role: str = "viewer"
+
+
+@app.post("/api/users")
+def create_user(body: NewUserBody, user=Depends(auth.require_admin)):
+    name = auth.check_username(body.username)
+    if body.role not in auth.ROLES:
+        raise HTTPException(400, "Vai trò không hợp lệ")
+    auth.check_password(body.password, name)
+    if db.one("SELECT id FROM users WHERE username=? COLLATE NOCASE", (name,)):
+        raise HTTPException(400, f"Tên đăng nhập '{name}' đã tồn tại")
+    # mật khẩu do quản lý đặt -> người dùng phải đổi sau lần đăng nhập đầu
+    db.execute("INSERT INTO users(username,password_hash,role,created_at,must_change) VALUES(?,?,?,?,1)",
+               (name, auth.hash_password(body.password), body.role, db.now_iso()))
+    state.log("info", "account", f"Quản lý {user['sub']} tạo tài khoản {ROLE_TEXT[body.role]} '{name}'")
+    return {"ok": True}
+
+
+class UpdateUserBody(BaseModel):
+    role: str | None = None
+    active: bool | None = None
+
+
+@app.patch("/api/users/{uid}")
+def update_user(uid: int, body: UpdateUserBody, user=Depends(auth.require_admin)):
+    u = _get_user(uid)
+    if uid == user["uid"]:
+        raise HTTPException(400, "Không thể tự đổi quyền hoặc tự khóa tài khoản của mình")
+    changes = []
+    if body.role is not None and body.role != u["role"]:
+        if body.role not in auth.ROLES:
+            raise HTTPException(400, "Vai trò không hợp lệ")
+        _keep_one_admin(u)
+        db.execute("UPDATE users SET role=? WHERE id=?", (body.role, uid))
+        u["role"] = body.role
+        changes.append(f"đổi quyền thành {ROLE_TEXT[body.role]}")
+    if body.active is not None and body.active != bool(u["active"]):
+        if not body.active:
+            _keep_one_admin(u)
+        db.execute("UPDATE users SET active=? WHERE id=?", (int(body.active), uid))
+        changes.append("mở khóa" if body.active else "khóa")
+    if changes:
+        state.log("info", "account", f"Quản lý {user['sub']} {', '.join(changes)} tài khoản '{u['username']}'")
+    return {"ok": True}
+
+
+class ResetPasswordBody(BaseModel):
+    password: str
+
+
+@app.post("/api/users/{uid}/reset-password")
+def reset_password(uid: int, body: ResetPasswordBody, user=Depends(auth.require_admin)):
+    u = _get_user(uid)
+    if uid == user["uid"]:
+        raise HTTPException(400, "Đổi mật khẩu của chính mình ở mục Đổi mật khẩu")
+    auth.check_password(body.password, u["username"])
+    db.execute("UPDATE users SET password_hash=?, must_change=1, token_ver=token_ver+1 WHERE id=?",
+               (auth.hash_password(body.password), uid))
+    state.log("info", "account", f"Quản lý {user['sub']} đặt lại mật khẩu tài khoản '{u['username']}'")
+    return {"ok": True}
+
+
+@app.delete("/api/users/{uid}")
+def delete_user(uid: int, user=Depends(auth.require_admin)):
+    u = _get_user(uid)
+    if uid == user["uid"]:
+        raise HTTPException(400, "Không thể tự xóa tài khoản của mình")
+    _keep_one_admin(u)
+    db.execute("DELETE FROM users WHERE id=?", (uid,))
+    state.log("info", "account", f"Quản lý {user['sub']} xóa tài khoản '{u['username']}'")
+    return {"ok": True}
 
 
 # ----------------------------------------------------------------- dữ liệu
@@ -378,13 +518,6 @@ async def barrier(body: BarrierBody, user=Depends(auth.require_admin)):
     return {"ok": True}
 
 
-@app.post("/api/devices/led-test")
-async def led_test(user=Depends(auth.require_admin)):
-    if not await hub.to_pi({"type": "command", "cmd": "led_test"}):
-        raise HTTPException(503, "Raspberry Pi đang offline")
-    return {"ok": True}
-
-
 @app.post("/api/detector/reference")
 def capture_reference(user=Depends(auth.require_admin)):
     if not engine.capture_reference():
@@ -471,7 +604,7 @@ async def stream(user=Depends(auth.current_user)):
 # ----------------------------------------------------------------- WebSocket
 @app.websocket("/ws/dashboard")
 async def ws_dashboard(ws: WebSocket, token: str = Query(default="")):
-    if not auth.decode_token(token):
+    if not auth.user_from_token(token):
         await ws.close(code=4401)
         return
     await ws.accept()
@@ -655,7 +788,25 @@ def _check_roi(roi):
 def plate_cam(user=Depends(auth.current_user)):
     cfg = dict(plates.cam.cfg)
     cfg["key"] = "••••" if cfg.get("key") else ""  # không trả khóa về trình duyệt
-    return {"config": cfg, "status": plates.status()}
+    return {"config": cfg, "status": plates.status(), "model": plates.model_info(),
+            "thresholds": dict(plate_mod.AI), "default_thresholds": plate_mod.AI_DEFAULT}
+
+
+class PlateAiBody(BaseModel):
+    det_conf: float
+    min_conf: float
+
+
+@app.put("/api/plate-ai")
+def put_plate_ai(body: PlateAiBody, user=Depends(auth.require_admin)):
+    for name, v in (("Ngưỡng tìm biển", body.det_conf), ("Ngưỡng chấp nhận kết quả", body.min_conf)):
+        if not 0.05 <= v <= 0.95:
+            raise HTTPException(400, f"{name} phải trong khoảng 0.05–0.95")
+    old = dict(plate_mod.AI)
+    plate_mod.set_ai({"det_conf": round(body.det_conf, 2), "min_conf": round(body.min_conf, 2)})
+    state.log("info", "plate_model", f"Quản lý {user['sub']} đổi ngưỡng biển số: tìm biển {old['det_conf']:.2f} -> "
+                                     f"{body.det_conf:.2f}, chấp nhận {old['min_conf']:.2f} -> {body.min_conf:.2f}")
+    return {"ok": True, "thresholds": dict(plate_mod.AI)}
 
 
 @app.put("/api/plate-cam")
@@ -794,7 +945,7 @@ async def manual_entry(body: PlateBody, user=Depends(auth.require_admin)):
             "image": (plates.recent[0].get("image") if plates.recent and plates.recent[0]["gate"] == "in" else None)}
     res = state.handle_entry(read, mode="manual")
     if not res["allowed"]:
-        raise HTTPException(409, " ".join([res["oled"]["title"], *res["oled"]["lines"]]))
+        raise HTTPException(409, " ".join([res["screen"]["title"], *res["screen"]["lines"]]))
     sent = await hub.to_pi({"type": "command", "cmd": "gate_result", "gate": "in", "result": res})
     return {"ok": True, "pi": sent, "slot": res.get("label")}
 

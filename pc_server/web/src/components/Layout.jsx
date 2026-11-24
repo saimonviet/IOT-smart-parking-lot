@@ -1,5 +1,5 @@
-import { NavLink, Outlet } from 'react-router-dom'
-import { BarChart3, Car, Cpu, History, LayoutDashboard, LayoutGrid, LogOut, ParkingSquare } from 'lucide-react'
+import { Link, NavLink, Outlet, useLocation } from 'react-router-dom'
+import { BarChart3, Car, Cpu, History, LayoutDashboard, LayoutGrid, LogOut, ParkingSquare, ShieldAlert, Users } from 'lucide-react'
 import { useAuth } from '../App.jsx'
 import { useLive } from '../useLive.js'
 
@@ -8,8 +8,9 @@ const NAV = [
   { to: '/vehicles', label: 'Xe ra vào', icon: Car },
   { to: '/history', label: 'Lịch sử đỗ xe', icon: History },
   { to: '/analytics', label: 'Thống kê', icon: BarChart3 },
-  { to: '/devices', label: 'Thiết bị', icon: Cpu },
+  { to: '/devices', label: 'Thiết bị & AI', icon: Cpu },
   { to: '/layout-settings', label: 'Sơ đồ bãi', icon: LayoutGrid, admin: true },
+  { to: '/account', label: 'Tài khoản', icon: Users },
 ]
 
 function Pill({ ok, label }) {
@@ -24,6 +25,7 @@ export default function Layout() {
   const { user, logout } = useAuth()
   const live = useLive()
   const dev = live.state?.devices
+  const { pathname } = useLocation()
 
   return (
     <div className="shell">
@@ -43,13 +45,13 @@ export default function Layout() {
           ))}
         </nav>
         <div className="sidebar-foot">
-          <div className="user">
+          <Link to="/account" className="user user-link" title="Tài khoản / đổi mật khẩu">
             <div className="avatar">{user.username[0].toUpperCase()}</div>
             <div>
               <div className="user-name">{user.username}</div>
-              <div className="user-role">{user.role === 'admin' ? 'Quản lý' : 'Xem'}</div>
+              <div className="user-role">{user.role === 'admin' ? 'Quản lý' : 'Nhân viên'}</div>
             </div>
-          </div>
+          </Link>
           <button className="icon-btn" title="Đăng xuất" onClick={logout}><LogOut size={18} /></button>
         </div>
       </aside>
@@ -65,6 +67,12 @@ export default function Layout() {
           </div>
         </header>
         <div className="content">
+          {user.must_change && pathname !== '/account' && (
+            <div className="notice must-change">
+              <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}><ShieldAlert size={16} /> Tài khoản đang dùng mật khẩu mặc định hoặc mật khẩu được cấp.</span>
+              <Link to="/account">Đổi mật khẩu ngay →</Link>
+            </div>
+          )}
           <Outlet context={live} />
         </div>
       </main>

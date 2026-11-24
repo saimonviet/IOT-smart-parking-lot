@@ -110,6 +110,30 @@ def save_cam(cfg):
     CAM_PATH.write_text(json.dumps(cfg, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
+# ============================================================ ngưỡng AI biển số (chỉnh trên trang Thiết bị & AI)
+AI_PATH = config.DATA_DIR / "plate_ai.json"
+AI_DEFAULT = {"det_conf": config.PLATE_DET_CONF,   # bước 1: YOLO chỉ nhận khung biển có độ tin cậy >= ngưỡng này
+              "min_conf": config.PLATE_MIN_CONF}   # bước 2: kết quả đọc (sau bỏ phiếu) >= ngưỡng này mới chấp nhận
+
+
+def load_ai():
+    cfg = dict(AI_DEFAULT)
+    try:
+        saved = json.loads(AI_PATH.read_text(encoding="utf-8"))
+        cfg.update({k: float(v) for k, v in saved.items() if k in cfg})
+    except (OSError, ValueError, TypeError):
+        pass
+    return cfg
+
+
+AI = load_ai()  # dùng chung, set_ai() đổi tại chỗ nên có hiệu lực ngay ở lượt đọc kế tiếp
+
+
+def set_ai(cfg):
+    AI.update(cfg)
+    AI_PATH.write_text(json.dumps(AI, indent=2), encoding="utf-8")
+
+
 # ============================================================ nguồn ảnh
 class PlateCamera:
     """Lấy ảnh theo yêu cầu từ ESP32-CAM (không giữ luồng MJPEG liên tục -> ESP32 mát và ổn định hơn)."""
@@ -274,7 +298,7 @@ class PlateModel:
         return self.det is not None and self.ocr is not None
 
     def detect(self, img):
-        r = self.det.predict(img, conf=config.PLATE_DET_CONF, imgsz=config.PLATE_DET_IMGSZ, verbose=False)[0]
+        r = self.det.predict(img, conf=AI["det_conf"], imgsz=config.PLATE_DET_IMGSZ, verbose=False)[0]
         names = r.names or {}
         out = []
         for b in r.boxes:
@@ -403,7 +427,22 @@ class PlateReader:
                 "model_error": m.error if m else "", "roi": self.cam.cfg.get("roi"),
                 "required": config.PLATE_REQUIRED, "recent": self.recent[:8]}
 
-    FLASH_WARMUP_S = 0.25   # chờ cảm biến ảnh chỉnh lại độ phơi sáng sau khi bật flash
+    @staticmethod
+    def model_info():
+        """Mô tả 2 mô hình biển số (đọc từ file .json đi kèm, không cần nạp mô hình) cho trang Thiết bị."""
+        meta_f = config.PLATE_OCR_MODEL.with_suffix(".json")
+        try:
+            meta = json.loads(meta_f.read_text(encoding="utf-8")) if meta_f.exists() else {}
+        except Exception:
+            meta = {}
+        return {"det_file": config.PLATE_DET_MODEL.name, "det_exists": config.PLATE_DET_MODEL.exists(),
+                "ocr_file": config.PLATE_OCR_MODEL.name, "ocr_exists": config.PLATE_OCR_MODEL.exists(),
+                "det_arch": meta.get("det_arch"), "ocr_arch": meta.get("arch"),
+                "det_metrics": meta.get("det_metrics") or {}, "ocr_metrics": meta.get("ocr_metrics") or {},
+                "e2e_metrics": meta.get("e2e_metrics") or {}, "datasets": meta.get("datasets") or [],
+                "created": meta.get("created")}
+
+    FLASH_WARMUP_S = 0.25  # chờ cảm biến ảnh chỉnh lại độ phơi sáng sau khi bật flash
 
     def read(self, gate, budget=None):
         """Đọc biển số ở một cổng. `budget` = tổng số giây được phép (gồm chờ lượt + xoay camera + chụp + nhận diện).
@@ -500,7 +539,7 @@ class PlateReader:
         conf = min(1.0, votes[plate] / frames)
         if not plate:
             return self._done(gate, None, 0.0, image, "Thấy biển nhưng không đọc được ký tự")
-        if not is_valid(plate) or conf < config.PLATE_MIN_CONF:
+        if not is_valid(plate) or conf < AI["min_conf"]:
             return self._done(gate, None, conf, image, f"Đọc chưa chắc chắn ({pretty(plate)}, {conf:.0%})",
                               guess=plate)
         return self._done(gate, plate, conf, image, "")

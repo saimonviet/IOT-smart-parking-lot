@@ -1,6 +1,6 @@
 """Giao thức bảo mật kênh Raspberry Pi <-> server (chỉ dùng thư viện chuẩn).
 
-File này có HAI BẢN GIỐNG HỆT NHAU: pc_server/app/secure_channel.py và raspberry_pi/secure_channel.py.
+File này có HAI BẢN GIỐNG HỆT NHAU: pc_server/app/secure_channel.py và raspberry_pi/core/secure_channel.py.
 Sửa bản nào thì chép đè sang bản kia.
 
 1) Bắt tay (challenge-response, xác thực HAI CHIỀU). Khóa bí mật K không bao giờ đi trên đường truyền:
